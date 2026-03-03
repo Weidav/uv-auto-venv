@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+*.tsbuildinfo
+
+# Build outputs
+out/
+dist/
+*.vsix
+
+# IDE
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+.nyc_output/
