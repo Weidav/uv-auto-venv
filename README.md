@@ -1,4 +1,4 @@
-# uv-auto-venv
+# uv Auto venv
 
 Stop switching venvs manually. Automatically activates [uv](https://docs.astral.sh/uv/) Python environments the moment you switch tabs in VS Code.
 
@@ -6,8 +6,8 @@ Stop switching venvs manually. Automatically activates [uv](https://docs.astral.
 
 - **Automatic venv activation** — detects and activates the correct Python interpreter every time you change the active editor tab.
 - **PEP 723 inline scripts** — recognises `# /// script` metadata and resolves the interpreter with `uv python find --script <file>`.
-- **Standard uv projects** — runs `uv python find` from the workspace root for projects with `pyproject.toml`.
-- **Manual trigger** — use the command palette: **UV Auto VEnv: Activate Virtual Environment**.
+- **Standard uv projects** — runs `uv python find` from the active file's directory, letting uv resolve the project root automatically.
+- **Manual trigger** — use the command palette: **uv Auto venv: Activate Virtual Environment**.
 
 ## Requirements
 
@@ -36,6 +36,6 @@ uv --version
 
 ## Release Notes
 
-### 0.0.1
+### 1.0.0
 
 Initial release — automatic venv activation via `uv python find` and `uv python find --script`.

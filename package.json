@@ -1,13 +1,22 @@
 {
   "name": "uv-auto-venv",
-  "displayName": "uv auto venv",
+  "displayName": "uv Auto venv",
   "description": "Stop switching venvs manually. Auto-activates uv environments for standard projects with pyproject.toml and PEP-723 inline scripts the second you change tabs.",
-  "version": "0.0.1",
+  "version": "1.0.0",
+  "publisher": "Weidav",
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Weidav/uv-auto-venv"
+  },
   "engines": {
     "vscode": "^1.109.0"
   },
   "categories": [
     "Other"
+  ],
+  "extensionDependencies": [
+    "ms-python.python"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -17,11 +26,11 @@
     "commands": [
       {
         "command": "uv-auto-venv.activateVenv",
-        "title": "UV Auto VEnv: Activate Virtual Environment"
+        "title": "uv Auto venv: Activate Virtual Environment for current file"
       }
     ],
     "configuration": {
-      "title": "UV Auto VEnv",
+      "title": "uv Auto venv",
       "properties": {
         "uv-auto-venv.showNotifications": {
           "type": "boolean",
