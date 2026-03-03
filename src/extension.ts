@@ -107,6 +107,7 @@ async function setupPythonEnvironment(
 	pythonApi: PythonExtension
 ): Promise<void> {
 	const filePath = editor.document.uri.fsPath;
+	const fileDir = path.dirname(filePath);
 	const workspaceFolder = vscode.workspace.getWorkspaceFolder(
 		editor.document.uri
 	);
@@ -125,9 +126,8 @@ async function setupPythonEnvironment(
 		}
 	}
 
-	// 2. Normal project  ─  `uv python find` (run from file's directory)
-	const cwd = workspaceFolder?.uri.fsPath ?? path.dirname(filePath);
-	const pythonPath = await uvPythonFind(cwd);
+	// 2. Normal project  ─  `uv python find` from the file's directory
+	const pythonPath = await uvPythonFind(fileDir);
 	if (pythonPath && fs.existsSync(pythonPath)) {
 		await setInterpreter(
 			pythonApi,
