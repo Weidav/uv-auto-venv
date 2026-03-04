@@ -4,12 +4,16 @@ Stop switching venvs manually. Automatically activates [uv](https://docs.astral.
 
 Designed for monorepos with multiple Python projects, when working with scripts that use PEP 723 inline metadata, or in workspaces containing a mix of Python projects and scripts.
 
+The Python extension's built-in venv discovery works well for single-project repositories, but falls short in these scenarios. For PEP 723 inline scripts it doesn't work at all.
+
 ## Features
 
 - **Automatic venv activation** — detects and activates the correct Python interpreter every time you change the active editor tab.
 - **PEP 723 inline scripts** — recognises `# /// script` metadata and resolves the interpreter with `uv python find --script <file>`.
 - **Standard uv projects** — runs `uv python find` from the active file's directory, letting uv resolve the project root automatically.
 - **Manual trigger** — use the command palette: **uv Auto venv: Activate Virtual Environment**.
+
+> **Note:** This extension does not create virtual environments for you. It only detects and activates the correct interpreter for the active file. Use `uv sync` or `uv run` to create environments as needed.
 
 ## Requirements
 
@@ -23,6 +27,20 @@ Follow the [official installation guide](https://docs.astral.sh/uv/getting-start
 ```bash
 uv --version
 ```
+
+## Recommended Python Settings
+
+To avoid conflicts with the Python extension's built-in environment management, add the following to your `.vscode/settings.json`:
+
+```json
+{
+  "python.terminal.activateEnvironment": false,
+  "python.createEnvironment.contentButton": "hide",
+  "python.useEnvironmentsExtension": false
+}
+```
+
+These settings prevent the Python extension's built-in environment management from interfering with this extension.
 
 ## Extension Settings
 
