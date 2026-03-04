@@ -2,6 +2,8 @@
 
 Stop switching venvs manually. Automatically activates [uv](https://docs.astral.sh/uv/) Python environments the moment you switch tabs in VS Code.
 
+Designed for monorepos with multiple Python projects, when working with scripts that use PEP 723 inline metadata, or in workspaces containing a mix of Python projects and scripts.
+
 ## Features
 
 - **Automatic venv activation** — detects and activates the correct Python interpreter every time you change the active editor tab.

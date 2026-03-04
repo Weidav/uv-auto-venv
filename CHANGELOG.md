@@ -4,6 +4,13 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.0.1] - 2026-03-04
+
+### Changed
+
+- Updated README with project description.
+- Added extension icon.
+
 ## [1.0.0] - 2026-03-03
 
 ### Added
