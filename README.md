@@ -53,9 +53,3 @@ These settings prevent the Python extension's built-in environment management fr
 1. When you open or switch to a `.py` file that contains [PEP 723](https://peps.python.org/pep-0723/) inline script metadata (`# /// script`), the extension runs `uv python find --script <file>` and sets the returned interpreter.
 2. For all other files it runs `uv python find` from the workspace folder, which respects `pyproject.toml`, `.python-version`, and uv's own resolution rules.
 3. The interpreter is only updated when it differs from the currently active one to avoid unnecessary churn.
-
-## Release Notes
-
-### 1.0.0
-
-Initial release — automatic venv activation via `uv python find` and `uv python find --script`.

@@ -2,13 +2,27 @@
 
 All notable changes to the **uv-auto-venv** extension will be documented in this file.
 
-Format based on [Keep a Changelog](https://keepachangelog.com/).
+<!-- Format based on [Keep a Changelog](https://keepachangelog.com/). -->
+
+## [1.0.2] - 2026-03-04
+
+### Changed
+
+- Documented that the extension does not create virtual environments.
+
+### Added
+
+- Added explanation of why the Python extension's built-in venv discovery falls short
+- Added recommended Python extension settings to avoid conflicts
 
 ## [1.0.1] - 2026-03-04
 
 ### Changed
 
 - Updated README with project description.
+
+### Added
+
 - Added extension icon.
 
 ## [1.0.0] - 2026-03-03
