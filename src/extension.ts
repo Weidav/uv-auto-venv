@@ -147,14 +147,14 @@ export async function activate(
 
 	// Activate for the already-open editor
 	const activeEditor = vscode.window.activeTextEditor;
-	if (activeEditor) {
+	if (activeEditor && activeEditor.document.uri.fsPath.endsWith(".py")) {
 		await setupPythonEnvironment(activeEditor, pythonApi);
 	}
 
 	// Re-evaluate every time the user switches tabs
 	const onEditorChange = vscode.window.onDidChangeActiveTextEditor(
 		async (editor) => {
-			if (editor) {
+			if (editor && editor.document.uri.fsPath.endsWith(".py")) {
 				await setupPythonEnvironment(editor, pythonApi);
 			}
 		}

@@ -4,6 +4,12 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 
 <!-- Format based on [Keep a Changelog](https://keepachangelog.com/). -->
 
+## [1.1.0] - 2026-03-05
+
+### Changed
+
+- Interpreter activation is now restricted to `.py` files. Switching to non-Python files no longer triggers a uv lookup or interpreter change.
+
 ## [1.0.2] - 2026-03-04
 
 ### Changed
