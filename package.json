@@ -26,8 +26,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "uv-auto-venv.activateVenv",
-        "title": "uv Auto venv: Activate Virtual Environment for current file"
+        "command": "uv-auto-venv.reloadVenv",
+        "title": "uv Auto venv: Reload Virtual Environment"
       }
     ],
     "configuration": {

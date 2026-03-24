@@ -60,7 +60,8 @@ async function setInterpreter(
 	pythonApi: PythonExtension,
 	pythonPath: string,
 	workspaceFolder: vscode.WorkspaceFolder | undefined,
-	label: string
+	label: string,
+	refreshEnvironment = false
 ): Promise<void> {
 	const config = vscode.workspace.getConfiguration("uv-auto-venv");
 	const showNotifications = config.get<boolean>("showNotifications", true);
@@ -68,8 +69,10 @@ async function setInterpreter(
 	const currentEnv = pythonApi.environments.getActiveEnvironmentPath(
 		workspaceFolder?.uri
 	);
-
-	if (currentEnv.path === pythonPath) {
+	if (refreshEnvironment) {
+		await pythonApi.environments.refreshEnvironments({ forceRefresh: true });
+	}
+	else if (currentEnv.path === pythonPath) {
 		return; // already set
 	}
 
@@ -104,7 +107,8 @@ async function setInterpreter(
  */
 async function setupPythonEnvironment(
 	editor: vscode.TextEditor,
-	pythonApi: PythonExtension
+	pythonApi: PythonExtension,
+	refreshEnvironment = false
 ): Promise<void> {
 	const filePath = editor.document.uri.fsPath;
 	const fileDir = path.dirname(filePath);
@@ -120,7 +124,8 @@ async function setupPythonEnvironment(
 				pythonApi,
 				pythonPath,
 				workspaceFolder,
-				"PEP 723 script"
+				"PEP 723 script",
+				refreshEnvironment
 			);
 			return;
 		}
@@ -133,7 +138,8 @@ async function setupPythonEnvironment(
 			pythonApi,
 			pythonPath,
 			workspaceFolder,
-			"project"
+			"project",
+			refreshEnvironment
 		);
 	}
 }
@@ -162,11 +168,11 @@ export async function activate(
 
 	// Manual command
 	const manualCmd = vscode.commands.registerCommand(
-		"uv-auto-venv.activateVenv",
+		"uv-auto-venv.reloadVenv",
 		async () => {
 			const editor = vscode.window.activeTextEditor;
 			if (editor) {
-				await setupPythonEnvironment(editor, pythonApi);
+				await setupPythonEnvironment(editor, pythonApi, true);
 			} else {
 				vscode.window.showWarningMessage(
 					"uv-auto-venv: no active editor"
