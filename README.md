@@ -11,7 +11,7 @@ The Python extension's built-in venv discovery works well for single-project rep
 - **Automatic venv activation** — detects and activates the correct Python interpreter every time you change the active editor tab.
 - **PEP 723 inline scripts** — recognises `# /// script` metadata and resolves the interpreter with `uv python find --script <file>`.
 - **Standard uv projects** — runs `uv python find` from the active file's directory, letting uv resolve the project root automatically.
-- **Manual trigger** — use the command palette: **uv Auto venv: Activate Virtual Environment**.
+- **Manual trigger** — use the command palette: **uv Auto venv: Reload Virtual Environment**.
 
 > **Note:** This extension does not create virtual environments for you. It only detects and activates the correct interpreter for the active file. Use `uv sync` or `uv run` to create environments as needed.
 
@@ -51,5 +51,6 @@ These settings prevent the Python extension's built-in environment management fr
 ## How It Works
 
 1. When you open or switch to a `.py` file that contains [PEP 723](https://peps.python.org/pep-0723/) inline script metadata (`# /// script`), the extension runs `uv python find --script <file>` and sets the returned interpreter.
-2. For all other files it runs `uv python find` from the workspace folder, which respects `pyproject.toml`, `.python-version`, and uv's own resolution rules.
-3. The interpreter is only updated when it differs from the currently active one to avoid unnecessary churn.
+2. For all other files it runs `uv python find` from the active file's directory, which respects `pyproject.toml`, `.python-version`, and uv's own resolution rules.
+3. The interpreter is only updated when it differs from the currently active one to avoid unnecessary churn during tab switching.
+4. The manual reload command forces a refresh and reapplies the interpreter, which can help when the language server does not pick up environment changes immediately.
