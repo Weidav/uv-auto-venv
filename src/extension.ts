@@ -70,7 +70,11 @@ async function setInterpreter(
 		workspaceFolder?.uri
 	);
 	if (refreshEnvironment) {
-		await pythonApi.environments.refreshEnvironments({ forceRefresh: true });
+		await pythonApi.environments.refreshEnvironments();
+		await pythonApi.environments.updateActiveEnvironmentPath(
+			"",
+			workspaceFolder?.uri
+		);
 	}
 	else if (currentEnv.path === pythonPath) {
 		return; // already set
