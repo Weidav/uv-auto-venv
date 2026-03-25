@@ -4,6 +4,16 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 
 <!-- Format based on [Keep a Changelog](https://keepachangelog.com/). -->
 
+## [1.2.0] - 2026-03-25
+
+### Added
+
+- Manual refresh now forces environment discovery before re-selecting the interpreter, ensuring language server updates are applied.
+
+### Changed
+
+- Changed a manual refresh command to: **uv Auto venv: Reload Virtual Environment**.
+
 ## [1.1.0] - 2026-03-05
 
 ### Changed
