@@ -4,6 +4,17 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 
 <!-- Format based on [Keep a Changelog](https://keepachangelog.com/). -->
 
+## [1.3.0] - 2026-06-06
+
+### Added
+
+- Automated integration test suite and Python example projects for better stability and testing.
+- Dev container configuration with built-in Python and uv support.
+
+### Changed
+
+- Updated dependencies and ensured Antigravity compatibility.
+
 ## [1.2.0] - 2026-03-25
 
 ### Added
