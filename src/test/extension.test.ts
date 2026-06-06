@@ -1,6 +1,8 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as cp from 'child_process';
+import * as fs from 'fs';
 
 suite('uv-auto-venv Extension Test Suite', function () {
 	this.timeout(100000);
@@ -17,6 +19,23 @@ suite('uv-auto-venv Extension Test Suite', function () {
 		{ name: 'example-pkg', file: 'src/example_pkg/__init__.py', expectedPath: 'example-pkg/.venv/bin' },
 		{ name: 'example-script', file: 'main.py', expectedPath: 'uv/environments-v2' }
 	];
+
+	suiteSetup(() => {
+		const workspaceFolders = vscode.workspace.workspaceFolders;
+		if (workspaceFolders && workspaceFolders.length > 0) {
+			const fixturesFolder = workspaceFolders[0].uri.fsPath;
+			for (const project of projects) {
+				const projectPath = path.join(fixturesFolder, project.name);
+				const pyprojectPath = path.join(projectPath, 'pyproject.toml');
+				if (fs.existsSync(pyprojectPath)) {
+					cp.execSync('uv sync', { cwd: projectPath });
+				} else {
+					cp.execSync(`uv sync --script ${project.file}`, { cwd: projectPath });
+				}
+			}
+		}
+	});
+
 
 	for (const project of projects) {
 		test(`Should activate and switch to project environment for ${project.name}`, async () => {
