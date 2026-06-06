@@ -11,11 +11,11 @@ suite('uv-auto-venv Extension Test Suite', function () {
 	});
 
 	const projects = [
-		{ name: 'example-app', file: 'main.py', expectedPath: 'example-app' },
-		{ name: 'example-bare', file: 'main.py', expectedPath: 'example-bare' },
-		{ name: 'example-lib', file: 'src/example_lib/__init__.py', expectedPath: 'example-lib' },
-		{ name: 'example-pkg', file: 'src/example_pkg/__init__.py', expectedPath: 'example-pkg' },
-		{ name: 'example-script', file: 'main.py', expectedPath: 'uv' }
+		{ name: 'example-app', file: 'main.py', expectedPath: 'example-app/.venv/bin' },
+		{ name: 'example-bare', file: 'main.py', expectedPath: 'example-bare/.venv/bin' },
+		{ name: 'example-lib', file: 'src/example_lib/__init__.py', expectedPath: 'example-lib/.venv/bin' },
+		{ name: 'example-pkg', file: 'src/example_pkg/__init__.py', expectedPath: 'example-pkg/.venv/bin' },
+		{ name: 'example-script', file: 'main.py', expectedPath: 'uv/environments-v2' }
 	];
 
 	for (const project of projects) {
@@ -41,11 +41,11 @@ suite('uv-auto-venv Extension Test Suite', function () {
 			if (!workspaceFolders || workspaceFolders.length === 0) {
 				assert.fail('No workspace folder found. Ensure tests run with test-fixtures folder.');
 			}
-			
+
 			const fixturesFolder = workspaceFolders[0].uri.fsPath;
 			const appFilePath = path.join(fixturesFolder, project.name, project.file);
 
-			
+
 			// Open the file
 			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(appFilePath));
 			await vscode.window.showTextDocument(document);
@@ -55,7 +55,7 @@ suite('uv-auto-venv Extension Test Suite', function () {
 
 			const api = pythonExtension.exports;
 			const activeEnv = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
-			
+
 			// The environment should be set to the corresponding project venv or uv cache
 			assert.ok(activeEnv.path.includes(project.expectedPath), `Expected path to include '${project.expectedPath}', but got ${activeEnv.path}`);
 		});
