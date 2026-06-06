@@ -69,14 +69,22 @@ suite('uv-auto-venv Extension Test Suite', function () {
 			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(appFilePath));
 			await vscode.window.showTextDocument(document);
 
-			// Wait for the extension to process the editor change
-			await new Promise(resolve => setTimeout(resolve, 2000));
-
 			const api = pythonExtension.exports;
-			const activeEnv = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
+			let activeEnv = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
+
+			// Poll for the extension to process the editor change (up to 10 seconds)
+			const timeout = Date.now() + 10000;
+			while (Date.now() < timeout) {
+				if (activeEnv && activeEnv.path && activeEnv.path.includes(project.expectedPath)) {
+					break;
+				}
+				await new Promise(resolve => setTimeout(resolve, 100));
+				activeEnv = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
+			}
 
 			// The environment should be set to the corresponding project venv or uv cache
-			assert.ok(activeEnv.path.includes(project.expectedPath), `Expected path to include '${project.expectedPath}', but got ${activeEnv.path}`);
+			const actualPath = activeEnv ? activeEnv.path : 'undefined';
+			assert.ok(actualPath.includes(project.expectedPath), `Expected path to include '${project.expectedPath}', but got ${actualPath}`);
 		});
 	}
 });
