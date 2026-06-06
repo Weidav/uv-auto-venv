@@ -5,6 +5,7 @@
     "dbaeumer.vscode-eslint",
     "github.vscode-pull-request-github",
     "ms-vscode.extension-test-runner",
-    "eamodio.gitlens"
+    "eamodio.gitlens",
+    "ms-python.python"
   ]
 }
