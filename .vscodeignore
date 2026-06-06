@@ -13,3 +13,4 @@ vsc-extension-quickstart.md
 **/*.ts
 **/*.log
 **/.vscode-test.*
+test-fixtures/**

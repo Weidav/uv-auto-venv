@@ -9,7 +9,7 @@
       "shellautocompletion": true
     }
   },
-  "postCreateCommand": "npm install",
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y libatk1.0-0 libatk-bridge2.0-0 libgtk-3-0 libnss3 libx11-xcb1 libasound2 libxss1 libdrm2 libgbm1 xvfb && npm install",
   "mounts": [
     "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/node/.ssh,type=bind,readonly",
     "source=${localEnv:HOME}${localEnv:USERPROFILE}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly"
@@ -17,24 +17,20 @@
   "customizations": {
     "idx": {
       "extensions": [
-        "akamud.vscode-theme-onedark",
         "amodio.tsl-problem-matcher",
         "connor4312.esbuild-problem-matchers",
         "dbaeumer.vscode-eslint",
-        "github.vscode-pull-request-github",
         "ms-vscode.extension-test-runner",
-        "eamodio.gitlens"
+        "ms-python.python"
       ]
     },
     "vscode": {
       "extensions": [
-        "akamud.vscode-theme-onedark",
         "amodio.tsl-problem-matcher",
         "connor4312.esbuild-problem-matchers",
         "dbaeumer.vscode-eslint",
-        "github.vscode-pull-request-github",
         "ms-vscode.extension-test-runner",
-        "eamodio.gitlens"
+        "ms-python.python"
       ]
     }
   }

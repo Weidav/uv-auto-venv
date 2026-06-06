@@ -1,0 +1,13 @@
+[project]
+name = "example-app"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "cowsay>=6.1",
+    "example-lib",
+]
+
+[tool.uv.sources]
+example-lib = { path = "../example-lib", editable = true }
