@@ -28,7 +28,9 @@ suite('uv-auto-venv Extension Test Suite', () => {
 
 		// Use the test-fixtures workspace
 		const workspaceFolders = vscode.workspace.workspaceFolders;
-		assert.ok(workspaceFolders && workspaceFolders.length > 0, 'No workspace folder found. Ensure tests run with test-fixtures folder.');
+		if (!workspaceFolders || workspaceFolders.length === 0) {
+			assert.fail('No workspace folder found. Ensure tests run with test-fixtures folder.');
+		}
 		
 		const fixturesFolder = workspaceFolders[0].uri.fsPath;
 		const appFilePath = path.join(fixturesFolder, 'example-app', 'main.py');
