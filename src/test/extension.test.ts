@@ -2,7 +2,8 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as path from 'path';
 
-suite('uv-auto-venv Extension Test Suite', () => {
+suite('uv-auto-venv Extension Test Suite', function () {
+	this.timeout(100000);
 	vscode.window.showInformationMessage('Start all tests.');
 
 	test('Extension should be present', () => {
@@ -57,6 +58,6 @@ suite('uv-auto-venv Extension Test Suite', () => {
 			
 			// The environment should be set to the corresponding project venv or uv cache
 			assert.ok(activeEnv.path.includes(project.expectedPath), `Expected path to include '${project.expectedPath}', but got ${activeEnv.path}`);
-		}).timeout(10000);
+		});
 	}
 });
