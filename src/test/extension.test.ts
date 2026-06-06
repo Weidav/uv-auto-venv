@@ -22,16 +22,18 @@ suite('uv-auto-venv Extension Test Suite', function () {
 
 	suiteSetup(() => {
 		const workspaceFolders = vscode.workspace.workspaceFolders;
-		if (workspaceFolders && workspaceFolders.length > 0) {
-			const fixturesFolder = workspaceFolders[0].uri.fsPath;
-			for (const project of projects) {
-				const projectPath = path.join(fixturesFolder, project.name);
-				const pyprojectPath = path.join(projectPath, 'pyproject.toml');
-				if (fs.existsSync(pyprojectPath)) {
-					cp.execSync('uv sync', { cwd: projectPath });
-				} else {
-					cp.execSync(`uv sync --script ${project.file}`, { cwd: projectPath });
-				}
+		if (!workspaceFolders || workspaceFolders.length === 0) {
+			assert.fail('No workspace folder found. Ensure tests run with test-fixtures folder.');
+		}
+
+		const fixturesFolder = workspaceFolders[0].uri.fsPath;
+		for (const project of projects) {
+			const projectPath = path.join(fixturesFolder, project.name);
+			const pyprojectPath = path.join(projectPath, 'pyproject.toml');
+			if (fs.existsSync(pyprojectPath)) {
+				cp.execSync('uv sync --link-mode=copy', { cwd: projectPath });
+			} else {
+				cp.execSync(`uv sync --link-mode=copy --script ${project.file}`, { cwd: projectPath });
 			}
 		}
 	});
