@@ -28,3 +28,9 @@ npm-debug.log*
 coverage/
 .nyc_output/
 .vscode-test/
+
+# gemini-cli settings
+.gemini/
+
+# GitHub App credentials
+gha-creds-*.json
