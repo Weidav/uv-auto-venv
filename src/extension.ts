@@ -178,9 +178,11 @@ export async function activate(
 			if (debounceTimer) {
 				clearTimeout(debounceTimer);
 			}
-			debounceTimer = setTimeout(async () => {
+			debounceTimer = setTimeout(() => {
 				if (editor && editor.document.uri.fsPath.endsWith(".py")) {
-					await setupPythonEnvironment(editor, pythonApi);
+					setupPythonEnvironment(editor, pythonApi).catch((err) => {
+						console.error("Failed to setup Python environment:", err);
+					});
 				}
 			}, 300);
 		}
