@@ -44,8 +44,9 @@ async function uvPythonFindScript(filePath: string): Promise<string | null> {
 			filePath,
 		]);
 		return stdout.trim() || null;
-	} catch (err) {
-		log.warn(`uv python find --script failed for ${filePath}: ${err}`);
+	} catch (err: unknown) {
+		const message = err instanceof Error ? err.message : String(err);
+		log.warn(`uv python find --script failed for ${filePath}: ${message}`);
 		return null;
 	}
 }
@@ -60,8 +61,9 @@ async function uvPythonFind(cwd: string): Promise<string | null> {
 			cwd,
 		});
 		return stdout.trim() || null;
-	} catch (err) {
-		log.warn(`uv python find failed in ${cwd}: ${err}`);
+	} catch (err: unknown) {
+		const message = err instanceof Error ? err.message : String(err);
+		log.warn(`uv python find failed in ${cwd}: ${message}`);
 		return null;
 	}
 }
