@@ -172,7 +172,7 @@ export async function activate(
 
 	// Activate for the already-open editor
 	const activeEditor = vscode.window.activeTextEditor;
-	if (activeEditor && activeEditor.document.uri.fsPath.endsWith(".py")) {
+	if (activeEditor && activeEditor.document.languageId === "python") {
 		await setupPythonEnvironment(activeEditor, pythonApi);
 	}
 
@@ -185,7 +185,7 @@ export async function activate(
 				clearTimeout(debounceTimer);
 			}
 			debounceTimer = setTimeout(() => {
-				if (editor && editor.document.uri.fsPath.endsWith(".py")) {
+				if (editor && editor.document.languageId === "python") {
 					setupPythonEnvironment(editor, pythonApi).catch((err) => {
 						console.error("Failed to setup Python environment:", err);
 					});
