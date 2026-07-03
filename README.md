@@ -44,9 +44,9 @@ These settings prevent the Python extension's built-in environment management fr
 
 ## Extension Settings
 
-| Setting | Type | Default | Description |
-|---|---|---|---|
-| `uv-auto-venv.showNotifications` | `boolean` | `true` | Show a notification when the Python interpreter is changed. |
+| Setting                          | Type      | Default | Description                                                 |
+| -------------------------------- | --------- | ------- | ----------------------------------------------------------- |
+| `uv-auto-venv.showNotifications` | `boolean` | `true`  | Show a notification when the Python interpreter is changed. |
 
 ## How It Works
 
