@@ -9,7 +9,7 @@
       "shellautocompletion": true
     }
   },
-  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y libatk1.0-0 libatk-bridge2.0-0 libgtk-3-0 libnss3 libx11-xcb1 libasound2 libxss1 libdrm2 libgbm1 xvfb && npm install && npm install -g @google/gemini-cli",
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y libatk1.0-0 libatk-bridge2.0-0 libgtk-3-0 libnss3 libx11-xcb1 libasound2 libxss1 libdrm2 libgbm1 xvfb && npm install",
   "customizations": {
     "vscode": {
       "extensions": [
