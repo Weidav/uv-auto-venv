@@ -11,8 +11,7 @@
   },
   "icon": "icon.png",
   "engines": {
-    "vscode": "^1.107.0",
-    "node": ">=24"
+    "vscode": "^1.107.0"
   },
   "categories": [
     "Programming Languages"
