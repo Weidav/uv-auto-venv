@@ -10,11 +10,17 @@ const execFileAsync = promisify(execFile);
 /**
  * Check if a .py file contains PEP 723 inline script metadata.
  * Looks for a line matching: # /// script
+ *
+ * Only reads the first 4 KB of the file since the metadata block
+ * appears at the top.
  */
 function hasPep723Metadata(filePath: string): boolean {
 	try {
-		const content = fs.readFileSync(filePath, "utf-8");
-		return /^# \/\/\/ script\s*$/m.test(content);
+		const fd = fs.openSync(filePath, "r");
+		const buf = Buffer.alloc(4096);
+		const bytesRead = fs.readSync(fd, buf, 0, 4096, 0);
+		fs.closeSync(fd);
+		return /^# \/\/\/ script\s*$/m.test(buf.toString("utf-8", 0, bytesRead));
 	} catch {
 		return false;
 	}
