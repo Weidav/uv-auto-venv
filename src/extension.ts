@@ -7,6 +7,8 @@ import { PythonExtension } from "@vscode/python-extension";
 
 const execFileAsync = promisify(execFile);
 
+const log = vscode.window.createOutputChannel("uv Auto venv", { log: true });
+
 /**
  * Check if a .py file contains PEP 723 inline script metadata.
  * Looks for a line matching: # /// script
@@ -42,7 +44,9 @@ async function uvPythonFindScript(filePath: string): Promise<string | null> {
 			filePath,
 		]);
 		return stdout.trim() || null;
-	} catch {
+	} catch (err: unknown) {
+		const message = err instanceof Error ? err.message : String(err);
+		log.warn(`uv python find --script failed for ${filePath}: ${message}`);
 		return null;
 	}
 }
@@ -57,7 +61,9 @@ async function uvPythonFind(cwd: string): Promise<string | null> {
 			cwd,
 		});
 		return stdout.trim() || null;
-	} catch {
+	} catch (err: unknown) {
+		const message = err instanceof Error ? err.message : String(err);
+		log.warn(`uv python find failed in ${cwd}: ${message}`);
 		return null;
 	}
 }
