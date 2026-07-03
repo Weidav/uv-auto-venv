@@ -17,10 +17,13 @@ const execFileAsync = promisify(execFile);
 function hasPep723Metadata(filePath: string): boolean {
 	try {
 		const fd = fs.openSync(filePath, "r");
-		const buf = Buffer.alloc(4096);
-		const bytesRead = fs.readSync(fd, buf, 0, 4096, 0);
-		fs.closeSync(fd);
-		return /^# \/\/\/ script\s*$/m.test(buf.toString("utf-8", 0, bytesRead));
+		try {
+			const buf = Buffer.alloc(4096);
+			const bytesRead = fs.readSync(fd, buf, 0, 4096, 0);
+			return /^# \/\/\/ script\s*$/m.test(buf.toString("utf-8", 0, bytesRead));
+		} finally {
+			fs.closeSync(fd);
+		}
 	} catch {
 		return false;
 	}
