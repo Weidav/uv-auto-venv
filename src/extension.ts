@@ -86,6 +86,7 @@ async function setInterpreter(
 	);
 	if (refreshEnvironment) {
 		await pythonApi.environments.refreshEnvironments();
+		// Clear cached path first so the update is not treated as a no-op
 		await pythonApi.environments.updateActiveEnvironmentPath(
 			"",
 			workspaceFolder?.uri
