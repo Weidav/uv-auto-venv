@@ -10,11 +10,20 @@ const execFileAsync = promisify(execFile);
 /**
  * Check if a .py file contains PEP 723 inline script metadata.
  * Looks for a line matching: # /// script
+ *
+ * Only reads the first 4 KB of the file since the metadata block
+ * appears at the top.
  */
 function hasPep723Metadata(filePath: string): boolean {
 	try {
-		const content = fs.readFileSync(filePath, "utf-8");
-		return /^# \/\/\/ script\s*$/m.test(content);
+		const fd = fs.openSync(filePath, "r");
+		try {
+			const buf = Buffer.alloc(4096);
+			const bytesRead = fs.readSync(fd, buf, 0, 4096, 0);
+			return /^# \/\/\/ script\s*$/m.test(buf.toString("utf-8", 0, bytesRead));
+		} finally {
+			fs.closeSync(fd);
+		}
 	} catch {
 		return false;
 	}
@@ -161,12 +170,21 @@ export async function activate(
 		await setupPythonEnvironment(activeEditor, pythonApi);
 	}
 
-	// Re-evaluate every time the user switches tabs
+	// Re-evaluate every time the user switches tabs, debounced to avoid
+	// spawning unnecessary `uv` sub-processes during rapid tab cycling.
+	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 	const onEditorChange = vscode.window.onDidChangeActiveTextEditor(
-		async (editor) => {
-			if (editor && editor.document.uri.fsPath.endsWith(".py")) {
-				await setupPythonEnvironment(editor, pythonApi);
+		(editor) => {
+			if (debounceTimer) {
+				clearTimeout(debounceTimer);
 			}
+			debounceTimer = setTimeout(() => {
+				if (editor && editor.document.uri.fsPath.endsWith(".py")) {
+					setupPythonEnvironment(editor, pythonApi).catch((err) => {
+						console.error("Failed to setup Python environment:", err);
+					});
+				}
+			}, 300);
 		}
 	);
 

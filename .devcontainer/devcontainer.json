@@ -11,15 +11,6 @@
   },
   "postCreateCommand": "sudo apt-get update && sudo apt-get install -y libatk1.0-0 libatk-bridge2.0-0 libgtk-3-0 libnss3 libx11-xcb1 libasound2 libxss1 libdrm2 libgbm1 xvfb && npm install",
   "customizations": {
-    "idx": {
-      "extensions": [
-        "amodio.tsl-problem-matcher",
-        "connor4312.esbuild-problem-matchers",
-        "dbaeumer.vscode-eslint",
-        "ms-vscode.extension-test-runner",
-        "ms-python.python"
-      ]
-    },
     "vscode": {
       "extensions": [
         "amodio.tsl-problem-matcher",
