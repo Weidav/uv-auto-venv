@@ -17,7 +17,7 @@ suite('uv-auto-venv Extension Test Suite', function () {
 		{ name: 'example-bare', file: 'main.py', expectedPath: 'example-bare/.venv/bin' },
 		{ name: 'example-lib', file: 'src/example_lib/__init__.py', expectedPath: 'example-lib/.venv/bin' },
 		{ name: 'example-pkg', file: 'src/example_pkg/__init__.py', expectedPath: 'example-pkg/.venv/bin' },
-		{ name: 'example-script', file: 'main.py', expectedPath: 'uv/environments-v2' }
+		{ name: 'example-script', file: 'main.py', expectedPath: 'environments-v2' }
 	];
 
 	suiteSetup(() => {
