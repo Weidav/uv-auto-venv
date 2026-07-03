@@ -167,12 +167,19 @@ export async function activate(
 		await setupPythonEnvironment(activeEditor, pythonApi);
 	}
 
-	// Re-evaluate every time the user switches tabs
+	// Re-evaluate every time the user switches tabs, debounced to avoid
+	// spawning unnecessary `uv` sub-processes during rapid tab cycling.
+	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 	const onEditorChange = vscode.window.onDidChangeActiveTextEditor(
-		async (editor) => {
-			if (editor && editor.document.uri.fsPath.endsWith(".py")) {
-				await setupPythonEnvironment(editor, pythonApi);
+		(editor) => {
+			if (debounceTimer) {
+				clearTimeout(debounceTimer);
 			}
+			debounceTimer = setTimeout(async () => {
+				if (editor && editor.document.uri.fsPath.endsWith(".py")) {
+					await setupPythonEnvironment(editor, pythonApi);
+				}
+			}, 300);
 		}
 	);
 
