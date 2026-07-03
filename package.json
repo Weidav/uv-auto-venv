@@ -56,18 +56,18 @@
     "test": "xvfb-run -a vscode-test"
   },
   "devDependencies": {
-    "@types/mocha": "^10.0.10",
+    "@types/mocha": "*",
     "@types/node": "25.x",
     "@types/vscode": "^1.107.0",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2",
-    "esbuild": "^0.28.0",
-    "eslint": "^10.4.1",
-    "npm-run-all": "^4.1.5",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.60.1"
+    "@vscode/test-cli": "*",
+    "@vscode/test-electron": "*",
+    "esbuild": "*",
+    "eslint": "*",
+    "npm-run-all": "*",
+    "typescript": "*",
+    "typescript-eslint": "*"
   },
   "dependencies": {
-    "@vscode/python-extension": "^1.0.6"
+    "@vscode/python-extension": "*"
   }
 }
