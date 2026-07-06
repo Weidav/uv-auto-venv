@@ -4,6 +4,16 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 
 <!-- Format based on [Keep a Changelog](https://keepachangelog.com/). -->
 
+## [1.4.1] - 2026-07-06
+
+### Changed
+
+- Extracted debounce tests into a dedicated `debounce.test.ts` file for better test organization.
+
+### Fixed
+
+- Excluded `.devcontainer/` and `.github/` directories from the published VSIX via `.vscodeignore`.
+
 ## [1.4.0] - 2026-07-03
 
 ### Added
