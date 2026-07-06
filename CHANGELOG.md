@@ -14,7 +14,7 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 ### Changed
 
 - Python file detection: Now uses `languageId` instead of file extension checks. This properly supports `.pyw` files, shebang-based detection, and user-configured language associations. (PEP 723 checks still require `.py`).
-- Performance: Debounced the tab-switch handler by 300ms, which prevents multiple `uv python find` subprocesses from spawning during rapid tab cycling.
+- Performance: Debounced the tab-switch handler by 300ms, which prevents multiple `uv python find` subprocesses from spawning during rapid tab cycling. Added debounce integration tests
 - Performance: The PEP 723 metadata check now only reads the first 4KB of a file, saving time on large scripts.
 - Documentation: Added an explanation of the `refreshEnvironments` empty-path workaround to the docs.
 - Development: Aligned project to Node v24, ES2024, and enabled stricter TypeScript checks (`noImplicitReturns`, `noFallthroughCasesInSwitch`, `noUnusedParameters`).
