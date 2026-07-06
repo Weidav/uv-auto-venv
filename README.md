@@ -50,7 +50,11 @@ These settings prevent the Python extension's built-in environment management fr
 
 ## How It Works
 
-1. When you open or switch to a `.py` file that contains [PEP 723](https://peps.python.org/pep-0723/) inline script metadata (`# /// script`), the extension runs `uv python find --script <file>` and sets the returned interpreter.
-2. For all other files it runs `uv python find` from the active file's directory, which respects `pyproject.toml`, `.python-version`, and uv's own resolution rules.
-3. The interpreter is only updated when it differs from the currently active one to avoid unnecessary churn during tab switching.
+1. When you open or switch to a `.py` file that contains [PEP 723](https://peps.python.org/pep-0723/) inline script metadata (`# /// script`), the extension runs `uv python find --script <file>` and sets the returned interpreter. (To save time on large files, only the first 4KB are checked).
+2. For all other Python files (detected via VS Code's language ID, supporting `.pyw` and shebangs) it runs `uv python find` from the active file's directory, which respects `pyproject.toml`, `.python-version`, and uv's own resolution rules.
+3. The interpreter is only updated when it differs from the currently active one, and tab-switching is debounced by 300ms to avoid unnecessary churn during rapid tab switching.
 4. The manual reload command forces a refresh and reapplies the interpreter, which can help when the language server does not pick up environment changes immediately.
+
+## Troubleshooting
+
+If environments are not activating as expected, you can check the **uv Auto venv** output channel in VS Code (`View` -> `Output`, then select `uv Auto venv` from the dropdown) to see diagnostic logs and `uv` command errors.

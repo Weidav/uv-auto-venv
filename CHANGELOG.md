@@ -4,6 +4,31 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 
 <!-- Format based on [Keep a Changelog](https://keepachangelog.com/). -->
 
+## [1.4.0] - 2026-07-03
+
+### Added
+
+- Added GitHub Actions workflow for automated testing.
+- Added a diagnostic logging output channel ("uv Auto venv") to log `uv` command failures.
+
+### Changed
+
+- Python file detection: Now uses `languageId` instead of file extension checks. This properly supports `.pyw` files, shebang-based detection, and user-configured language associations. (PEP 723 checks still require `.py`).
+- Performance: Debounced the tab-switch handler by 300ms, which prevents multiple `uv python find` subprocesses from spawning during rapid tab cycling. Added debounce integration tests
+- Performance: The PEP 723 metadata check now only reads the first 4KB of a file, saving time on large scripts.
+- Documentation: Added an explanation of the `refreshEnvironments` empty-path workaround to the docs.
+- Development: Aligned project to Node v24, ES2024, and enabled stricter TypeScript checks (`noImplicitReturns`, `noFallthroughCasesInSwitch`, `noUnusedParameters`).
+- Dependencies: Updated dependencies and removed fixed versions for dev-dependencies.
+
+### Fixed
+
+- Improved error logging by extracting messages from unknown error types in `uv python find` functions.
+- Guarded against null locations in the esbuild error handler to prevent build crashes.
+- Ensured file descriptors are properly closed when checking for PEP 723 metadata.
+- Handled asynchronous errors in Python environment setup to prevent timer callback crashes.
+- Removed devcontainer mounts and redundant IDX extension configurations.
+- Cleaned up `.gitignore` (removed duplicate `.DS_Store`, added `__pycache__`).
+
 ## [1.3.0] - 2026-06-06
 
 ### Added
