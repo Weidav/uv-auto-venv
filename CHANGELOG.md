@@ -4,6 +4,21 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 
 <!-- Format based on [Keep a Changelog](https://keepachangelog.com/). -->
 
+## [1.5.0] - 2026-07-09
+
+### Added
+
+- **Python Environments extension support** — when `python.useEnvironmentsExtension` is enabled, the extension now routes interpreter changes through the `ms-python.vscode-python-envs` API (`resolveEnvironment` → `setEnvironment`). This makes uv-auto-venv fully compatible with VS Code's new Python Environments experience, including per-file environment scoping for PEP 723 inline scripts.
+- Falls back gracefully to the classic `ms-python.python` API when the setting is off or the Python Environments extension is not installed — existing behaviour is unchanged.
+
+### Changed
+
+- Updated documentation: `python.useEnvironmentsExtension` is no longer recommended to be disabled. The README now explains both API paths and provides separate recommended settings for classic and python-envs workflows.
+
+### Fixed
+
+- Debounce integration tests now handle the python-envs extension's independent environment switching, which could cause false failures in the intermediate-environment assertion.
+
 ## [1.4.1] - 2026-07-06
 
 ### Changed
