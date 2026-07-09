@@ -2,18 +2,33 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as path from 'path';
 
+/**
+ * When `python.useEnvironmentsExtension` is enabled the python-envs extension
+ * independently reacts to editor changes and may set intermediate environments
+ * on the classic API — that behaviour is outside our debounce control.
+ * We detect the flag so tests that inspect the classic API can adapt.
+ */
+function isUsingEnvsExtension(): boolean {
+	const config = vscode.workspace.getConfiguration('python');
+	return config.get<boolean>('useEnvironmentsExtension', false);
+}
+
 suite('Debounce rapid editor changes', function () {
 	this.timeout(100000);
 
 	let api: any;
+	let envsApi: any;
 	let fixturesFolder: string;
 	let intermediateEnvSeen: boolean;
 	let checkInterval: ReturnType<typeof setInterval>;
 	let envRightAfter: any;
 	let envDuringDebounce: any;
 	let activeEnv: any;
+	let usingEnvsExt: boolean;
 
 	suiteSetup(async () => {
+		usingEnvsExt = isUsingEnvsExtension();
+
 		const pythonExtension = vscode.extensions.getExtension('ms-python.python');
 		if (!pythonExtension) {
 			assert.fail('Python extension not found');
@@ -28,6 +43,14 @@ suite('Debounce rapid editor changes', function () {
 		}
 		if (!ext.isActive) {
 			await ext.activate();
+		}
+
+		// Optionally acquire the python-envs API for verification
+		if (usingEnvsExt) {
+			const envsExt = vscode.extensions.getExtension('ms-python.vscode-python-envs');
+			if (envsExt) {
+				envsApi = envsExt.isActive ? envsExt.exports : await envsExt.activate();
+			}
 		}
 
 		const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -45,7 +68,7 @@ suite('Debounce rapid editor changes', function () {
 		// Wait a bit to ensure initial activation events have settled
 		await new Promise(resolve => setTimeout(resolve, 1000));
 
-		// Reset environment to empty for the workspace
+		// Reset environment to empty for the workspace (classic API)
 		await api.environments.updateActiveEnvironmentPath('', vscode.Uri.file(fixturesFolder));
 
 		intermediateEnvSeen = false;
@@ -72,12 +95,28 @@ suite('Debounce rapid editor changes', function () {
 		await new Promise(resolve => setTimeout(resolve, 100));
 		envDuringDebounce = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
 
-		// Now wait for the debouncer to fire and the process to finish
+		// Now wait for the debouncer to fire and the process to finish.
+		// When python-envs is active our extension writes via setEnvironment
+		// (not the classic API), so we check both channels.
+		const libUri = vscode.Uri.file(path.join(fixturesFolder, 'example-lib', 'src', 'example_lib', '__init__.py'));
 		activeEnv = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
 		const timeout = Date.now() + 10000;
 		while (Date.now() < timeout) {
+			// Classic API check
 			if (activeEnv && activeEnv.path && activeEnv.path.includes('example-lib/.venv/bin')) {
 				break;
+			}
+			// python-envs API check (environment set per-file)
+			if (envsApi) {
+				try {
+					const envsEnv = await envsApi.getEnvironment(libUri);
+					if (envsEnv && envsEnv.environmentPath &&
+						envsEnv.environmentPath.fsPath.includes('example-lib/.venv')) {
+						break;
+					}
+				} catch {
+					// python-envs API not ready yet, keep polling
+				}
 			}
 			await new Promise(resolve => setTimeout(resolve, 100));
 			activeEnv = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
@@ -100,14 +139,33 @@ suite('Debounce rapid editor changes', function () {
 		);
 	});
 
-	test('Should resolve to the last environment after the debounce fires', () => {
+	test('Should resolve to the last environment after the debounce fires', async () => {
+		// When python-envs is active, verify via its API (per-file scope)
+		if (envsApi) {
+			const libUri = vscode.Uri.file(path.join(fixturesFolder, 'example-lib', 'src', 'example_lib', '__init__.py'));
+			const envsEnv = await envsApi.getEnvironment(libUri);
+			assert.ok(
+				envsEnv && envsEnv.environmentPath &&
+				envsEnv.environmentPath.fsPath.includes('example-lib/.venv'),
+				`Expected python-envs environment to include 'example-lib/.venv', but got ${envsEnv?.environmentPath?.fsPath ?? 'undefined'}`
+			);
+			return;
+		}
+		// Classic API check
 		assert.ok(
 			activeEnv?.path?.includes('example-lib/.venv/bin'),
 			`Expected path to include 'example-lib/.venv/bin', but got ${activeEnv?.path}`
 		);
 	});
 
-	test('Should not activate intermediate environments during rapid switching', () => {
+	test('Should not activate intermediate environments during rapid switching', function () {
+		if (usingEnvsExt) {
+			// When python-envs is active it independently reacts to editor
+			// changes and may set intermediate environments on the classic
+			// API — that is outside our debounce control, so we skip this
+			// assertion.
+			this.skip();
+		}
 		assert.ok(
 			!intermediateEnvSeen,
 			'Intermediate environments (app, bare) should not be set due to debouncing'
