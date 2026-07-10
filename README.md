@@ -1,5 +1,6 @@
 # uv Auto venv
 
+[![CI](https://github.com/Weidav/uv-auto-venv/actions/workflows/test.yml/badge.svg)](https://github.com/Weidav/uv-auto-venv/actions/workflows/test.yml) [![Version](https://img.shields.io/badge/version-1.5.0-blue)](https://github.com/Weidav/uv-auto-venv/releases) [![VS Code Version](https://img.shields.io/badge/VS%20Code-%5E1.107.0-blue)](https://code.visualstudio.com/) [![License](https://img.shields.io/github/license/Weidav/uv-auto-venv)](https://github.com/Weidav/uv-auto-venv/blob/main/LICENSE) [![GitHub Stars](https://img.shields.io/github/stars/Weidav/uv-auto-venv?style=social)](https://github.com/Weidav/uv-auto-venv/stargazers)
 Stop switching venvs manually. Automatically activates [uv](https://docs.astral.sh/uv/) Python environments the moment you switch tabs in VS Code.
 
 Designed for monorepos with multiple Python projects, when working with scripts that use PEP 723 inline metadata, or in workspaces containing a mix of Python projects and scripts.
