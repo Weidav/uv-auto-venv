@@ -4,6 +4,18 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 
 <!-- Format based on [Keep a Changelog](https://keepachangelog.com/). -->
 
+## [Unreleased]
+
+### Added
+
+- Added multi-platform GitHub Actions CI pipeline running tests on Linux, macOS, and Windows.
+- Added repository badges (CI, Version, License, GitHub Stars) to the `README.md`.
+
+### Fixed
+
+- Fixed flaky `debounce` integration tests on slow CI environments by dynamically skipping timing-sensitive assertions if environment delays are too large.
+- Fixed test suite failures on Windows runners by using cross-platform path resolution for matching Python executable paths.
+
 ## [1.5.0] - 2026-07-09
 
 ### Added
