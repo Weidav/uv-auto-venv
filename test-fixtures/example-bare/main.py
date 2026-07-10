@@ -1,10 +1,11 @@
+
 import getpass
-import cowsay
+import termcolor
 
 def main():
-    print("Hello from example-bare!")
+    print(termcolor.colored("Hello from example-bare!", "green"))
     user = getpass.getuser()
-    cowsay.cow(f"Whoami? You are currently logged in as: {user}")
+    print(termcolor.colored(f"Whoami? You are currently logged in as: {user}", "blue"))
 
 if __name__ == "__main__":
     main()

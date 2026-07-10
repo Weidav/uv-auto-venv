@@ -1,7 +1,7 @@
 import getpass
-import cowsay
+from rich import print
 
 def hello() -> None:
-    print("Hello from example-pkg!")
+    print("[bold red]Hello[/bold red] from example-pkg!")
     user = getpass.getuser()
-    cowsay.cow(f"Whoami? You are currently logged in as: {user}")
+    print(f"Whoami? You are currently logged in as: {user}")

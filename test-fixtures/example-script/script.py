@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "cowsay>=6.1",
+#     "colorama>=0.4.6",
 #     "example-lib",
 # ]
 #
@@ -10,8 +10,10 @@
 # ///
 
 import example_lib
+import colorama
 
 def main():
+    colorama.init()
     example_lib.hello()
 
 

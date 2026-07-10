@@ -1,7 +1,7 @@
 import getpass
-import cowsay
+import pyfiglet
 
 def hello() -> None:
     print("Hello from example-lib!")
     user = getpass.getuser()
-    cowsay.cow(f"Whoami? You are currently logged in as: {user}")
+    print(pyfiglet.figlet_format(f"Hello {user}"))
