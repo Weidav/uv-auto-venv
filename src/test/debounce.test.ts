@@ -25,6 +25,7 @@ suite('Debounce rapid editor changes', function () {
 	let envDuringDebounce: any;
 	let activeEnv: any;
 	let usingEnvsExt: boolean;
+	let switchElapsed = 0;
 
 	suiteSetup(async () => {
 		usingEnvsExt = isUsingEnvsExtension();
@@ -80,13 +81,11 @@ suite('Debounce rapid editor changes', function () {
 		}, 10);
 
 		// Rapidly switch tabs (well within the 300ms debounce)
-		await vscode.window.showTextDocument(appDoc);
-		await new Promise(resolve => setTimeout(resolve, 50));
-
-		await vscode.window.showTextDocument(bareDoc);
-		await new Promise(resolve => setTimeout(resolve, 50));
-
-		await vscode.window.showTextDocument(libDoc);
+		const switchStart = Date.now();
+		await vscode.window.showTextDocument(appDoc, { preview: true, preserveFocus: false });
+		await vscode.window.showTextDocument(bareDoc, { preview: true, preserveFocus: false });
+		await vscode.window.showTextDocument(libDoc, { preview: true, preserveFocus: false });
+		switchElapsed = Date.now() - switchStart;
 
 		// Capture the environment immediately after the last switch
 		envRightAfter = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
@@ -164,6 +163,10 @@ suite('Debounce rapid editor changes', function () {
 			// changes and may set intermediate environments on the classic
 			// API — that is outside our debounce control, so we skip this
 			// assertion.
+			this.skip();
+		}
+		if (switchElapsed >= 250) {
+			console.log(`Skipping intermediate environment assertion because tab switching took too long (${switchElapsed}ms)`);
 			this.skip();
 		}
 		assert.ok(
