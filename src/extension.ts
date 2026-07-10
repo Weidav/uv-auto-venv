@@ -128,8 +128,8 @@ async function uvPythonFind(cwd: string): Promise<string | null> {
  * interpreter is set through BOTH the new python-envs API and the classic
  * API, because VS Code's own extensions can't agree on a single source of
  * truth for the active interpreter:
- *   - debugpy / test discovery → reads python-envs API
- *   - Pylance / linters        → reads classic ms-python.python API
+ *   - debugpy / test discovery 	→ reads python-envs API
+ *   - basedPyright / linters       → reads classic ms-python.python API
  *
  * Yes, we have to write the same information to two places.  No, there is
  * no documented reason why one API couldn't just notify the other.
