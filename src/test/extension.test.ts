@@ -13,10 +13,10 @@ suite('uv-auto-venv Extension Test Suite', function () {
 	});
 
 	const projects = [
-		{ name: 'example-app', file: 'main.py', expectedPath: 'example-app/.venv/bin' },
-		{ name: 'example-bare', file: 'main.py', expectedPath: 'example-bare/.venv/bin' },
-		{ name: 'example-lib', file: 'src/example_lib/__init__.py', expectedPath: 'example-lib/.venv/bin' },
-		{ name: 'example-pkg', file: 'src/example_pkg/__init__.py', expectedPath: 'example-pkg/.venv/bin' },
+		{ name: 'example-app', file: 'main.py', expectedPath: path.join('example-app', '.venv') },
+		{ name: 'example-bare', file: 'main.py', expectedPath: path.join('example-bare', '.venv') },
+		{ name: 'example-lib', file: 'src/example_lib/__init__.py', expectedPath: path.join('example-lib', '.venv') },
+		{ name: 'example-pkg', file: 'src/example_pkg/__init__.py', expectedPath: path.join('example-pkg', '.venv') },
 		{ name: 'example-script', file: 'main.py', expectedPath: 'environments-v2' }
 	];
 

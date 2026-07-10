@@ -102,7 +102,7 @@ suite('Debounce rapid editor changes', function () {
 		const timeout = Date.now() + 10000;
 		while (Date.now() < timeout) {
 			// Classic API check
-			if (activeEnv && activeEnv.path && activeEnv.path.includes('example-lib/.venv/bin')) {
+			if (activeEnv && activeEnv.path && activeEnv.path.includes(path.join('example-lib', '.venv'))) {
 				break;
 			}
 			// python-envs API check (environment set per-file)
@@ -126,14 +126,14 @@ suite('Debounce rapid editor changes', function () {
 
 	test('Should not set the final environment immediately after switching', () => {
 		assert.ok(
-			!envRightAfter?.path?.includes('example-lib/.venv/bin'),
+			!envRightAfter?.path?.includes(path.join('example-lib', '.venv')),
 			`Environment should not yet be set to example-lib immediately after switching, but got ${envRightAfter?.path}`
 		);
 	});
 
 	test('Should not set the final environment within the debounce window', () => {
 		assert.ok(
-			!envDuringDebounce?.path?.includes('example-lib/.venv/bin'),
+			!envDuringDebounce?.path?.includes(path.join('example-lib', '.venv')),
 			`Environment should not yet be set to example-lib within debounce window (100 ms), but got ${envDuringDebounce?.path}`
 		);
 	});
@@ -152,8 +152,8 @@ suite('Debounce rapid editor changes', function () {
 		}
 		// Classic API check
 		assert.ok(
-			activeEnv?.path?.includes('example-lib/.venv/bin'),
-			`Expected path to include 'example-lib/.venv/bin', but got ${activeEnv?.path}`
+			activeEnv?.path?.includes(path.join('example-lib', '.venv')),
+			`Expected path to include '${path.join('example-lib', '.venv')}', but got ${activeEnv?.path}`
 		);
 	});
 
