@@ -10,9 +10,8 @@ const execFileAsync = promisify(execFile);
 const log = vscode.window.createOutputChannel("uv Auto venv", { log: true });
 
 // ── Vendored python-envs types ──────────────────────────────────────────
-// Minimal subset of the ms-python.vscode-python-envs API surface.
-// There is no npm package for these types; they are defined here to avoid
-// a hard dependency on the extension.
+// VS Code's Python tooling is split across two extensions that don't share
+// a unified API or an npm package.  So we get to hand-roll our own types, awesome!
 
 interface PythonEnvsApi {
 	resolveEnvironment(
@@ -36,7 +35,7 @@ interface PythonEnvItem {
 
 /**
  * Check whether the user has opted into the new Python Environments
- * extension (`ms-python.vscode-python-envs`).
+ * extension — because apparently one Python extension isn't enough.
  */
 function useEnvsExtension(): boolean {
 	const config = vscode.workspace.getConfiguration("python");
@@ -45,7 +44,8 @@ function useEnvsExtension(): boolean {
 
 /**
  * Try to acquire the python-envs API.  Returns `undefined` when the
- * extension is not installed or the setting is off.
+ * extension is not installed or the setting is off — in which case
+ * VS Code will graciously still honour the classic API.  For now.
  */
 async function getEnvsApi(): Promise<PythonEnvsApi | undefined> {
 	if (!useEnvsExtension()) {
@@ -125,11 +125,14 @@ async function uvPythonFind(cwd: string): Promise<string | null> {
  * Attempt to set the active Python interpreter.
  *
  * When `envsApi` is available (python.useEnvironmentsExtension is on) the
- * interpreter is set through the new python-envs API which supports
- * per-file scope — exactly what PEP 723 inline scripts need, and what
- * debugpy / Pylance actually read when that flag is enabled.
+ * interpreter is set through BOTH the new python-envs API and the classic
+ * API, because VS Code's own extensions can't agree on a single source of
+ * truth for the active interpreter:
+ *   - debugpy / test discovery → reads python-envs API
+ *   - Pylance / linters        → reads classic ms-python.python API
  *
- * Falls back to the classic `updateActiveEnvironmentPath` otherwise.
+ * Yes, we have to write the same information to two places.  No, there is
+ * no documented reason why one API couldn't just notify the other.
  */
 async function setInterpreter(
 	envsApi: PythonEnvsApi | undefined,
@@ -143,7 +146,36 @@ async function setInterpreter(
 	const config = vscode.workspace.getConfiguration("uv-auto-venv");
 	const showNotifications = config.get<boolean>("showNotifications", true);
 
-	// ── python-envs path (preferred when available) ─────────────────────
+	// ── Check if already set (must verify BOTH channels because of course) ─
+	if (!refreshEnvironment) {
+		const classicCurrent = pythonApi.environments.getActiveEnvironmentPath(
+			workspaceFolder?.uri
+		);
+		let alreadySet = classicCurrent.path === pythonPath;
+
+		if (envsApi && alreadySet) {
+			try {
+				const currentEnvsEnv = await envsApi.getEnvironment(fileUri);
+				const resolved = await envsApi.resolveEnvironment(
+					vscode.Uri.file(pythonPath)
+				);
+				alreadySet =
+					alreadySet &&
+					!!currentEnvsEnv &&
+					!!resolved &&
+					currentEnvsEnv.envId.id === resolved.envId.id;
+			} catch {
+				// If python-envs check fails, fall through and set anyway
+				alreadySet = false;
+			}
+		}
+
+		if (alreadySet) {
+			return;
+		}
+	}
+
+	// ── python-envs path (because debugpy refuses to read the classic API) ─
 	if (envsApi) {
 		try {
 			const env = await envsApi.resolveEnvironment(
@@ -151,51 +183,24 @@ async function setInterpreter(
 			);
 
 			if (env) {
-				// Skip if already set (unless forced refresh)
-				if (!refreshEnvironment) {
-					const current = await envsApi.getEnvironment(fileUri);
-					if (current?.envId.id === env.envId.id) {
-						return;
-					}
-				}
-
 				await envsApi.setEnvironment(fileUri, env);
 				log.info(
 					`[python-envs] ${label} interpreter set to ${env.environmentPath.fsPath} (scope: ${fileUri.fsPath})`
 				);
-
-				if (showNotifications) {
-					const displayPath = workspaceFolder
-						? path.relative(
-							workspaceFolder.uri.fsPath,
-							env.environmentPath.fsPath
-						)
-						: env.environmentPath.fsPath;
-					const folderSuffix = workspaceFolder
-						? ` for ${workspaceFolder.name}`
-						: "";
-					vscode.window.showInformationMessage(
-						`uv-auto-venv: ${label} interpreter set to ${displayPath}${folderSuffix}`
-					);
-				}
-				return;
+			} else {
+				log.warn(
+					`python-envs could not resolve ${pythonPath}; skipping python-envs channel`
+				);
 			}
-
-			log.warn(
-				`python-envs could not resolve ${pythonPath}; falling back to classic API`
-			);
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err);
 			log.warn(
-				`python-envs setEnvironment failed: ${message}; falling back to classic API`
+				`python-envs setEnvironment failed: ${message}; skipping python-envs channel`
 			);
 		}
 	}
 
-	// ── classic path (workspace-folder scope) ────────────────────────────
-	const currentEnv = pythonApi.environments.getActiveEnvironmentPath(
-		workspaceFolder?.uri
-	);
+	// ── classic path (because Pylance refuses to read the python-envs API) ─
 	if (refreshEnvironment) {
 		await pythonApi.environments.refreshEnvironments();
 		// Clear cached path first so the update is not treated as a no-op
@@ -203,8 +208,6 @@ async function setInterpreter(
 			"",
 			workspaceFolder?.uri
 		);
-	} else if (currentEnv.path === pythonPath) {
-		return; // already set
 	}
 
 	try {
@@ -288,10 +291,10 @@ export async function activate(
 ): Promise<void> {
 	const pythonApi = await PythonExtension.api();
 
-	// When python.useEnvironmentsExtension is on, debugpy and Pylance read
-	// the interpreter from ms-python.vscode-python-envs instead of the
-	// classic ms-python.python API.  Acquire the new API so we write to
-	// the channel that is actually being read.
+	// When python.useEnvironmentsExtension is on, debugpy reads from
+	// python-envs while Pylance still reads from the classic API.  Since
+	// nobody told these two extensions to talk to each other, we get the
+	// privilege of writing to both.
 	const envsApi = await getEnvsApi();
 	if (envsApi) {
 		log.info(

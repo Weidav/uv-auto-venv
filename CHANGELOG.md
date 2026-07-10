@@ -4,6 +4,12 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 
 <!-- Format based on [Keep a Changelog](https://keepachangelog.com/). -->
 
+## [1.5.1] - 2026-07-10
+
+### Fixed
+
+- **Write to both APIs simultaneously** — when `python.useEnvironmentsExtension` is enabled, the interpreter is now set through both the python-envs API (for debugpy / test discovery) and the classic API (for Pylance / linters). v1.5.0 only wrote to python-envs, which left Pylance and linters pointing at the wrong interpreter.
+
 ## [1.5.0] - 2026-07-09
 
 ### Added
