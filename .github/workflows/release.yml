@@ -99,4 +99,4 @@ jobs:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
           VSIX_FILE=$(ls *.vsix | head -n 1)
-          npx @vscode/vsce publish --packagePath "$VSIX_FILE"
+          npx -y @vscode/vsce publish --packagePath "$VSIX_FILE"
