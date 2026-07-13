@@ -4,6 +4,19 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 
 <!-- Format based on [Keep a Changelog](https://keepachangelog.com/). -->
 
+## [Unreleased]
+
+### Added
+
+- Added multi-platform GitHub Actions CI pipeline running tests on Linux, macOS, and Windows.
+- Added repository badges (CI, Version, License, GitHub Stars) to the `README.md`.
+
+### Fixed
+
+- Made debounce integration tests fully deterministic by asserting on a `setupCallCount` exposed via the extension's testing API, replacing the flaky timing-based intermediate environment polling.
+- Fixed test suite failures on Windows by replacing hardcoded forward slashes with `path.join` in all path assertions.
+- Hoisted duplicated extension activation logic out of individual test loops into `suiteSetup` for faster, cleaner test runs.
+
 ## [1.5.0] - 2026-07-09
 
 ### Added
