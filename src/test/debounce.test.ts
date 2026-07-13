@@ -105,7 +105,7 @@ suite('Debounce rapid editor changes', function () {
 				try {
 					const envsEnv = await envsApi.getEnvironment(libUri);
 					if (envsEnv && envsEnv.environmentPath &&
-						envsEnv.environmentPath.fsPath.includes('example-lib/.venv')) {
+						envsEnv.environmentPath.fsPath.includes(path.join('example-lib', '.venv'))) {
 						break;
 					}
 				} catch {
@@ -141,8 +141,8 @@ suite('Debounce rapid editor changes', function () {
 			const envsEnv = await envsApi.getEnvironment(libUri);
 			assert.ok(
 				envsEnv && envsEnv.environmentPath &&
-				envsEnv.environmentPath.fsPath.includes('example-lib/.venv'),
-				`Expected python-envs environment to include 'example-lib/.venv', but got ${envsEnv?.environmentPath?.fsPath ?? 'undefined'}`
+				envsEnv.environmentPath.fsPath.includes(path.join('example-lib', '.venv')),
+				`Expected python-envs environment to include '${path.join('example-lib', '.venv')}', but got ${envsEnv?.environmentPath?.fsPath ?? 'undefined'}`
 			);
 			return;
 		}
