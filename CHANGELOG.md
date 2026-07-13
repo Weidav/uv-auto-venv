@@ -4,7 +4,7 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 
 <!-- Format based on [Keep a Changelog](https://keepachangelog.com/). -->
 
-## [Unreleased]
+## [1.5.1] - 2026-07-13
 
 ### Added
 
