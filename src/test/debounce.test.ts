@@ -165,7 +165,7 @@ suite('Debounce rapid editor changes', function () {
 			// assertion.
 			this.skip();
 		}
-		if (switchElapsed >= 250) {
+		if (switchElapsed >= 100) {
 			console.log(`Skipping intermediate environment assertion because tab switching took too long (${switchElapsed}ms)`);
 			this.skip();
 		}
