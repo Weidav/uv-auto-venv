@@ -13,8 +13,9 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 
 ### Fixed
 
-- Fixed flaky `debounce` integration tests on slow CI environments by dynamically skipping timing-sensitive assertions if environment delays are too large.
-- Fixed test suite failures on Windows runners by using cross-platform path resolution for matching Python executable paths.
+- Made debounce integration tests fully deterministic by asserting on a `setupCallCount` exposed via the extension's testing API, replacing the flaky timing-based intermediate environment polling.
+- Fixed test suite failures on Windows by replacing hardcoded forward slashes with `path.join` in all path assertions.
+- Hoisted duplicated extension activation logic out of individual test loops into `suiteSetup` for faster, cleaner test runs.
 
 ## [1.5.0] - 2026-07-09
 
