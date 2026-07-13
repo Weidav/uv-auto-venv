@@ -24,13 +24,10 @@ suite('Debounce rapid editor changes', function () {
 	let envRightAfter: any;
 	let envDuringDebounce: any;
 	let activeEnv: any;
-	let usingEnvsExt: boolean;
 	let setupCountBefore: number;
 	let setupCountAfter: number;
 
 	suiteSetup(async () => {
-		usingEnvsExt = isUsingEnvsExtension();
-
 		const pythonExtension = vscode.extensions.getExtension('ms-python.python');
 		if (!pythonExtension) {
 			assert.fail('Python extension not found');
@@ -49,7 +46,7 @@ suite('Debounce rapid editor changes', function () {
 		testingApi = ext.exports as TestingApi;
 
 		// Optionally acquire the python-envs API for verification
-		if (usingEnvsExt) {
+		if (isUsingEnvsExtension()) {
 			const envsExt = vscode.extensions.getExtension('ms-python.vscode-python-envs');
 			if (envsExt) {
 				envsApi = envsExt.isActive ? envsExt.exports : await envsExt.activate();
