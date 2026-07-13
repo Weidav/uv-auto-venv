@@ -32,6 +32,17 @@ interface PythonEnvItem {
 	readonly environmentPath: vscode.Uri;
 }
 
+// ── Testing instrumentation ─────────────────────────────────────────────
+
+let setupCallCount = 0;
+
+export interface TestingApi {
+	/** Number of times setupPythonEnvironment has been called. */
+	getSetupCallCount(): number;
+	/** Reset the counter (call before a test scenario). */
+	resetSetupCallCount(): void;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 /**
@@ -242,6 +253,7 @@ async function setupPythonEnvironment(
 	pythonApi: PythonExtension,
 	refreshEnvironment = false
 ): Promise<void> {
+	setupCallCount++;
 	const filePath = editor.document.uri.fsPath;
 	const fileUri = editor.document.uri;
 	const fileDir = path.dirname(filePath);
@@ -285,7 +297,7 @@ async function setupPythonEnvironment(
 
 export async function activate(
 	context: vscode.ExtensionContext
-): Promise<void> {
+): Promise<TestingApi> {
 	const pythonApi = await PythonExtension.api();
 
 	// When python.useEnvironmentsExtension is on, debugpy and Pylance read
@@ -346,6 +358,11 @@ export async function activate(
 	);
 
 	context.subscriptions.push(onEditorChange, manualCmd);
+
+	return {
+		getSetupCallCount: () => setupCallCount,
+		resetSetupCallCount: () => { setupCallCount = 0; },
+	};
 }
 
 export function deactivate(): void { }

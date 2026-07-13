@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as path from 'path';
+import type { TestingApi } from '../../src/extension';
 
 /**
  * When `python.useEnvironmentsExtension` is enabled the python-envs extension
@@ -18,14 +19,14 @@ suite('Debounce rapid editor changes', function () {
 
 	let api: any;
 	let envsApi: any;
+	let testingApi: TestingApi;
 	let fixturesFolder: string;
-	let intermediateEnvSeen: boolean;
-	let checkInterval: ReturnType<typeof setInterval>;
 	let envRightAfter: any;
 	let envDuringDebounce: any;
 	let activeEnv: any;
 	let usingEnvsExt: boolean;
-	let switchElapsed = 0;
+	let setupCountBefore: number;
+	let setupCountAfter: number;
 
 	suiteSetup(async () => {
 		usingEnvsExt = isUsingEnvsExtension();
@@ -45,6 +46,7 @@ suite('Debounce rapid editor changes', function () {
 		if (!ext.isActive) {
 			await ext.activate();
 		}
+		testingApi = ext.exports as TestingApi;
 
 		// Optionally acquire the python-envs API for verification
 		if (usingEnvsExt) {
@@ -72,20 +74,13 @@ suite('Debounce rapid editor changes', function () {
 		// Reset environment to empty for the workspace (classic API)
 		await api.environments.updateActiveEnvironmentPath('', vscode.Uri.file(fixturesFolder));
 
-		intermediateEnvSeen = false;
-		checkInterval = setInterval(() => {
-			const env = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
-			if (env && env.path && (env.path.includes('example-app') || env.path.includes('example-bare'))) {
-				intermediateEnvSeen = true;
-			}
-		}, 10);
+		// Record call count before rapid switching
+		setupCountBefore = testingApi.getSetupCallCount();
 
 		// Rapidly switch tabs (well within the 300ms debounce)
-		const switchStart = Date.now();
 		await vscode.window.showTextDocument(appDoc, { preview: true, preserveFocus: false });
 		await vscode.window.showTextDocument(bareDoc, { preview: true, preserveFocus: false });
 		await vscode.window.showTextDocument(libDoc, { preview: true, preserveFocus: false });
-		switchElapsed = Date.now() - switchStart;
 
 		// Capture the environment immediately after the last switch
 		envRightAfter = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
@@ -121,7 +116,8 @@ suite('Debounce rapid editor changes', function () {
 			activeEnv = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
 		}
 
-		clearInterval(checkInterval);
+		// Record call count after debounce has settled
+		setupCountAfter = testingApi.getSetupCallCount();
 	});
 
 	test('Should not set the final environment immediately after switching', () => {
@@ -157,21 +153,12 @@ suite('Debounce rapid editor changes', function () {
 		);
 	});
 
-	test('Should not activate intermediate environments during rapid switching', function () {
-		if (usingEnvsExt) {
-			// When python-envs is active it independently reacts to editor
-			// changes and may set intermediate environments on the classic
-			// API — that is outside our debounce control, so we skip this
-			// assertion.
-			this.skip();
-		}
-		if (switchElapsed >= 100) {
-			console.log(`Skipping intermediate environment assertion because tab switching took too long (${switchElapsed}ms)`);
-			this.skip();
-		}
-		assert.ok(
-			!intermediateEnvSeen,
-			'Intermediate environments (app, bare) should not be set due to debouncing'
+	test('Should invoke setupPythonEnvironment exactly once during rapid switching', function () {
+		const callsDuringTest = setupCountAfter - setupCountBefore;
+		assert.strictEqual(
+			callsDuringTest,
+			1,
+			`Expected setupPythonEnvironment to be called exactly 1 time (debounced), but it was called ${callsDuringTest} times`
 		);
 	});
 });
