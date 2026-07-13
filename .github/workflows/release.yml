@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run typecheck
+        run: npm run check-types
+
+      - name: Compile extension
+        run: npm run compile
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
+      - name: Compile tests
+        run: npm run compile-tests
+
+      - name: Run tests
+        run: xvfb-run -a npx vscode-test
+
+      - name: Verify Version
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          RELEASE_TAG=${{ github.event.release.tag_name }}
+          if [ "$PACKAGE_VERSION" != "$RELEASE_TAG" ]; then
+            echo "Error: package.json version ($PACKAGE_VERSION) does not match the GitHub Release tag ($RELEASE_TAG)"
+            exit 1
+          fi
+          echo "Version match: $PACKAGE_VERSION == $RELEASE_TAG"
+
+  package:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package VSIX
+        run: npx @vscode/vsce package --no-dependencies
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: vsix-package
+          path: "*.vsix"
+          retention-days: 90
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download VSIX artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: vsix-package
+          path: .
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Publish to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          VSIX_FILE=$(ls *.vsix | head -n 1)
+          npx @vscode/vsce publish --packagePath "$VSIX_FILE"
