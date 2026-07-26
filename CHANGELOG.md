@@ -4,6 +4,12 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 
 <!-- Format based on [Keep a Changelog](https://keepachangelog.com/). -->
 
+## [1.5.2] - 2026-07-26
+
+### Changed
+
+- Replaced handwritten `ms-python.vscode-python-envs` type definitions with official types from the [`@vscode/python-environments`](https://www.npmjs.com/package/@vscode/python-environments) package (dev-dependency only, not bundled in the extension).
+
 ## [1.5.1] - 2026-07-13
 
 ### Added

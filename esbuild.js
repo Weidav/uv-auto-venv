@@ -37,7 +37,7 @@ async function main() {
 		sourcesContent: false,
 		platform: 'node',
 		outfile: 'dist/extension.js',
-		external: ['vscode'],
+		external: ['vscode', '@vscode/python-environments'],
 		logLevel: 'silent',
 		plugins: [
 			/* add to the end of plugins array */
