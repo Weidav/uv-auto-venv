@@ -4,33 +4,11 @@ import * as path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { PythonExtension } from "@vscode/python-extension";
+import type { PythonEnvironmentApi } from "@vscode/python-environments";
 
 const execFileAsync = promisify(execFile);
 
 const log = vscode.window.createOutputChannel("uv Auto venv", { log: true });
-
-// ── Vendored python-envs types ──────────────────────────────────────────
-// Minimal subset of the ms-python.vscode-python-envs API surface.
-// There is no npm package for these types; they are defined here to avoid
-// a hard dependency on the extension.
-
-interface PythonEnvsApi {
-	resolveEnvironment(
-		context: vscode.Uri
-	): Promise<PythonEnvItem | undefined>;
-	getEnvironment(
-		scope: vscode.Uri | undefined
-	): Promise<PythonEnvItem | undefined>;
-	setEnvironment(
-		scope: vscode.Uri | vscode.Uri[] | undefined,
-		env: PythonEnvItem
-	): Promise<void>;
-}
-
-interface PythonEnvItem {
-	readonly envId: { id: string; managerId: string };
-	readonly environmentPath: vscode.Uri;
-}
 
 // ── Testing instrumentation ─────────────────────────────────────────────
 
@@ -58,7 +36,7 @@ function useEnvsExtension(): boolean {
  * Try to acquire the python-envs API.  Returns `undefined` when the
  * extension is not installed or the setting is off.
  */
-async function getEnvsApi(): Promise<PythonEnvsApi | undefined> {
+async function getEnvsApi(): Promise<PythonEnvironmentApi | undefined> {
 	if (!useEnvsExtension()) {
 		return undefined;
 	}
@@ -70,7 +48,7 @@ async function getEnvsApi(): Promise<PythonEnvsApi | undefined> {
 		return undefined;
 	}
 	const api = ext.isActive ? ext.exports : await ext.activate();
-	return api as PythonEnvsApi;
+	return api as PythonEnvironmentApi;
 }
 
 /**
@@ -143,7 +121,7 @@ async function uvPythonFind(cwd: string): Promise<string | null> {
  * Falls back to the classic `updateActiveEnvironmentPath` otherwise.
  */
 async function setInterpreter(
-	envsApi: PythonEnvsApi | undefined,
+	envsApi: PythonEnvironmentApi | undefined,
 	pythonApi: PythonExtension,
 	pythonPath: string,
 	fileUri: vscode.Uri,
@@ -249,7 +227,7 @@ async function setInterpreter(
  */
 async function setupPythonEnvironment(
 	editor: vscode.TextEditor,
-	envsApi: PythonEnvsApi | undefined,
+	envsApi: PythonEnvironmentApi | undefined,
 	pythonApi: PythonExtension,
 	refreshEnvironment = false
 ): Promise<void> {

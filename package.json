@@ -2,7 +2,7 @@
   "name": "uv-auto-venv",
   "displayName": "uv Auto venv",
   "description": "Stop switching venvs manually. Auto-activates uv environments for standard projects with pyproject.toml and PEP-723 inline scripts the second you change tabs.",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "publisher": "Weidav",
   "license": "GPL-3.0-only",
   "repository": {
@@ -59,6 +59,7 @@
     "@types/mocha": "*",
     "@types/node": "24.x",
     "@types/vscode": "^1.107.0",
+    "@vscode/python-environments": "^1.0.0",
     "@vscode/test-cli": "*",
     "@vscode/test-electron": "*",
     "esbuild": "*",
