@@ -144,15 +144,19 @@ async function uvPythonFind(cwd: string): Promise<string | null> {
 	}
 }
 
-/** Find the nearest project marker without registering directories outside the workspace. */
-function findProjectRoot(fileDir: string, workspaceFolder: vscode.WorkspaceFolder): vscode.Uri | undefined {
+/** Find the nearest project marker within a folder scope. */
+function findProjectRoot(fileDir: string, scope: vscode.Uri): vscode.Uri | undefined {
+	const relativeDirectory = path.relative(scope.fsPath, fileDir);
+	if (path.isAbsolute(relativeDirectory) || relativeDirectory === ".."
+		|| relativeDirectory.startsWith(".." + path.sep)) {
+		return undefined;
+	}
 	let directory = fileDir;
-	const workspacePath = workspaceFolder.uri.fsPath;
 	while (true) {
 		if (fs.existsSync(path.join(directory, "pyproject.toml"))) {
 			return vscode.Uri.file(directory);
 		}
-		if (directory === workspacePath || path.dirname(directory) === directory) {
+		if (path.relative(scope.fsPath, directory) === "" || path.dirname(directory) === directory) {
 			return undefined;
 		}
 		directory = path.dirname(directory);
@@ -370,9 +374,10 @@ async function setupPythonEnvironment(
 		// Use the owning folder's shared selection, never create a per-script project.
 		const owner = envsApi?.getPythonProject(fileUri);
 		const scope = owner?.uri ?? workspaceFolder?.uri;
-		if (envsApi && scope && fs.existsSync(path.join(scope.fsPath, "pyproject.toml"))) {
+		const projectRoot = envsApi && scope ? findProjectRoot(fileDir, scope) : undefined;
+		if (projectRoot) {
 			log.warn(
-				`PEP 723 script ${filePath} is inside the regular project ${scope.fsPath}; ` +
+				`PEP 723 script ${filePath} is inside the regular project ${projectRoot.fsPath}; ` +
 				"move scripts to a separate scope to keep the project's environment fixed"
 			);
 			return;
@@ -398,7 +403,7 @@ async function setupPythonEnvironment(
 	// 2. Normal project  ─  `uv python find` from the file's directory
 	const pythonPath = await uvPythonFind(fileDir);
 	if (pythonPath && fs.existsSync(pythonPath) && isCurrent()) {
-		const projectRoot = envsApi && workspaceFolder ? findProjectRoot(fileDir, workspaceFolder) : undefined;
+		const projectRoot = envsApi && workspaceFolder ? findProjectRoot(fileDir, workspaceFolder.uri) : undefined;
 		const scope = projectRoot ?? envsApi?.getPythonProject(fileUri)?.uri ?? workspaceFolder?.uri;
 		await setInterpreter(
 			envsApi,

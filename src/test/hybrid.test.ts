@@ -72,6 +72,17 @@ suite('Hybrid project and script environments', () => {
 		assert.ok(extension.warnings.some(w => w.includes('separate scope')));
 	});
 
+	test('Protects an unregistered regular project when its script is opened first', async () => {
+		const extension = await activate();
+		await extension.reload(fileEditor(scriptA));
+		const selections = extension.selections.slice();
+		await extension.reload(fileEditor(nestedScript));
+		assert.deepStrictEqual(extension.selections, selections);
+		assert.deepStrictEqual(extension.lookups, [scriptA]);
+		assert.deepStrictEqual(extension.registrations, []);
+		assert.ok(extension.warnings.some(w => w.includes(app) && w.includes('separate scope')));
+	});
+
 	test('Allows a separately registered scripts folder inside a regular project', async () => {
 		const scriptsFolder = path.dirname(nestedScript);
 		const extension = await activate({ projects: [scriptsFolder] });
@@ -80,6 +91,37 @@ suite('Hybrid project and script environments', () => {
 		assert.deepStrictEqual(extension.registrations, [app]);
 		assert.deepStrictEqual(extension.selections.at(-1), { scope: scriptsFolder, interpreter: scriptAEnv });
 		assert.strictEqual((await extension.envsApi.getEnvironment(uri(appFile)))?.environmentPath.fsPath, appEnv);
+	});
+
+	test('Allows a registered scripts folder before its containing project is opened', async () => {
+		const scriptsFolder = path.dirname(nestedScript);
+		const extension = await activate({ projects: [scriptsFolder] });
+		await extension.reload(fileEditor(nestedScript));
+		assert.deepStrictEqual(extension.selections, [{ scope: scriptsFolder, interpreter: scriptAEnv }]);
+		assert.deepStrictEqual(extension.registrations, []);
+		assert.deepStrictEqual(extension.warnings, []);
+	});
+
+	test('Respects an individually registered script scope', async () => {
+		const extension = await activate({ projects: [nestedScript] });
+		await extension.reload(fileEditor(nestedScript));
+		assert.deepStrictEqual(extension.selections, [{ scope: nestedScript, interpreter: scriptAEnv }]);
+		assert.deepStrictEqual(extension.registrations, []);
+		assert.deepStrictEqual(extension.warnings, []);
+	});
+
+	test('Protects unregistered projects nested inside a registered scripts folder', async () => {
+		const scriptsFolder = path.join(root, 'scripts');
+		const project = path.join(scriptsFolder, 'project');
+		const script = path.join(project, 'main.py');
+		const extension = await activate({ projects: [scriptsFolder], files: {
+			...files, [path.join(project, 'pyproject.toml')]: '[project]', [script]: metadata,
+		} });
+		await extension.reload(fileEditor(script));
+		assert.deepStrictEqual(extension.selections, []);
+		assert.deepStrictEqual(extension.lookups, []);
+		assert.deepStrictEqual(extension.registrations, []);
+		assert.ok(extension.warnings.some(w => w.includes(project) && w.includes('separate scope')));
 	});
 
 	test('Protects a regular project at the workspace root', async () => {
