@@ -1,161 +1,183 @@
 import * as assert from 'assert';
-import * as vscode from 'vscode';
+import * as fs from 'fs';
 import * as path from 'path';
-import type { TestingApi } from '../../src/extension';
+import { mock } from 'node:test';
+import { promisify } from 'util';
+import { runInNewContext } from 'vm';
+import type * as vscode from 'vscode';
 
-/**
- * When `python.useEnvironmentsExtension` is enabled the python-envs extension
- * independently reacts to editor changes and may set intermediate environments
- * on the classic API — that behaviour is outside our debounce control.
- * We detect the flag so tests that inspect the classic API can adapt.
- */
-function isUsingEnvsExtension(): boolean {
-	const config = vscode.workspace.getConfiguration('python');
-	return config.get<boolean>('useEnvironmentsExtension', false);
+type Editor = vscode.TextEditor | undefined;
+
+function editor(project: string, languageId = 'python'): vscode.TextEditor {
+	return {
+		document: {
+			languageId,
+			uri: { fsPath: path.join('workspace', project, 'main.py') },
+		},
+	} as vscode.TextEditor;
 }
 
-suite('Debounce rapid editor changes', function () {
-	this.timeout(100000);
-
-	let api: any;
-	let envsApi: any;
-	let testingApi: TestingApi;
-	let fixturesFolder: string;
-	let envRightAfter: any;
-	let envDuringDebounce: any;
-	let activeEnv: any;
-	let setupCountBefore: number;
-	let setupCountAfter: number;
-
-	suiteSetup(async () => {
-		const pythonExtension = vscode.extensions.getExtension('ms-python.python');
-		if (!pythonExtension) {
-			assert.fail('Python extension not found');
-		}
-		if (!pythonExtension.isActive) {
-			await pythonExtension.activate();
-		}
-
-		const ext = vscode.extensions.getExtension('Weidav.uv-auto-venv');
-		if (!ext) {
-			assert.fail('uv-auto-venv extension not found');
-		}
-		if (!ext.isActive) {
-			await ext.activate();
-		}
-		testingApi = ext.exports as TestingApi;
-
-		// Optionally acquire the python-envs API for verification
-		if (isUsingEnvsExtension()) {
-			const envsExt = vscode.extensions.getExtension('ms-python.vscode-python-envs');
-			if (envsExt) {
-				envsApi = envsExt.isActive ? envsExt.exports : await envsExt.activate();
-			}
-		}
-
-		const workspaceFolders = vscode.workspace.workspaceFolders;
-		if (!workspaceFolders || workspaceFolders.length === 0) {
-			assert.fail('No workspace folder found. Ensure tests run with test-fixtures folder.');
-		}
-
-		fixturesFolder = workspaceFolders[0].uri.fsPath;
-		api = pythonExtension.exports;
-
-		const appDoc = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(fixturesFolder, 'example-app', 'main.py')));
-		const bareDoc = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(fixturesFolder, 'example-bare', 'main.py')));
-		const libDoc = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(fixturesFolder, 'example-lib', 'src', 'example_lib', '__init__.py')));
-
-		// Wait a bit to ensure initial activation events have settled
-		await new Promise(resolve => setTimeout(resolve, 1000));
-
-		// Reset environment to empty for the workspace (classic API)
-		await api.environments.updateActiveEnvironmentPath('', vscode.Uri.file(fixturesFolder));
-
-		// Record call count before rapid switching
-		setupCountBefore = testingApi.getSetupCallCount();
-
-		// Rapidly switch tabs (well within the 300ms debounce)
-		await vscode.window.showTextDocument(appDoc, { preview: true, preserveFocus: false });
-		await vscode.window.showTextDocument(bareDoc, { preview: true, preserveFocus: false });
-		await vscode.window.showTextDocument(libDoc, { preview: true, preserveFocus: false });
-
-		// Capture the environment immediately after the last switch
-		envRightAfter = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
-
-		// Wait 100ms (still within the 300ms debounce window) and capture again
-		await new Promise(resolve => setTimeout(resolve, 100));
-		envDuringDebounce = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
-
-		// Now wait for the debouncer to fire and the process to finish.
-		// When python-envs is active our extension writes via setEnvironment
-		// (not the classic API), so we check both channels.
-		const libUri = vscode.Uri.file(path.join(fixturesFolder, 'example-lib', 'src', 'example_lib', '__init__.py'));
-		activeEnv = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
-		const timeout = Date.now() + 10000;
-		while (Date.now() < timeout) {
-			// Classic API check
-			if (activeEnv && activeEnv.path && activeEnv.path.includes(path.join('example-lib', '.venv'))) {
-				break;
-			}
-			// python-envs API check (environment set per-file)
-			if (envsApi) {
-				try {
-					const envsEnv = await envsApi.getEnvironment(libUri);
-					if (envsEnv && envsEnv.environmentPath &&
-						envsEnv.environmentPath.fsPath.includes(path.join('example-lib', '.venv'))) {
-						break;
-					}
-				} catch {
-					// python-envs API not ready yet, keep polling
-				}
-			}
-			await new Promise(resolve => setTimeout(resolve, 100));
-			activeEnv = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
-		}
-
-		// Record call count after debounce has settled
-		setupCountAfter = testingApi.getSetupCallCount();
+/** Load the real extension in isolation, replacing only its external APIs. */
+async function activateExtension(useEnvsExtension: boolean) {
+	const lookups: string[] = [];
+	const selections: { interpreter: string; scope: string }[] = [];
+	let onChange: ((editor: Editor) => void) | undefined;
+	const uri = (fsPath: string) => ({ fsPath });
+	const pythonApi = {
+		environments: {
+			getActiveEnvironmentPath: () => ({ path: '' }),
+			updateActiveEnvironmentPath: async (interpreter: string, scope: vscode.Uri) => {
+				selections.push({ interpreter, scope: scope.fsPath });
+			},
+		},
+	};
+	const envsApi = {
+		resolveEnvironment: async (environmentPath: vscode.Uri) => ({
+			envId: { id: environmentPath.fsPath }, environmentPath,
+		}),
+		getEnvironment: async () => undefined,
+		setEnvironment: async (scope: vscode.Uri, env: { environmentPath: vscode.Uri }) => {
+			selections.push({ interpreter: env.environmentPath.fsPath, scope: scope.fsPath });
+		},
+	};
+	const disposable = { dispose() {} };
+	const vscodeApi = {
+		Uri: { file: uri },
+		window: {
+			createOutputChannel: () => ({ info() {}, warn() {} }),
+			activeTextEditor: undefined,
+			onDidChangeActiveTextEditor: (listener: (editor: Editor) => void) => {
+				assert.strictEqual(onChange, undefined, 'Register only one editor listener');
+				onChange = listener;
+				return disposable;
+			},
+		},
+		workspace: {
+			getConfiguration: () => ({
+				get: (key: string) => key === 'useEnvironmentsExtension' && useEnvsExtension,
+			}),
+			getWorkspaceFolder: (file: vscode.Uri) => ({ uri: uri(path.dirname(file.fsPath)) }),
+		},
+		extensions: {
+			getExtension: () => ({ isActive: true, exports: envsApi }),
+		},
+		commands: { registerCommand: () => disposable },
+	};
+	// Match execFile's promisified result, without running uv or touching environments.
+	const execFile = Object.assign(() => assert.fail('Expected promisified execFile'), {
+		[promisify.custom]: async (command: string, args: string[], options: { cwd: string }) => {
+			assert.strictEqual(command, 'uv');
+			assert.deepStrictEqual(Array.from(args), ['python', 'find']);
+			lookups.push(options.cwd);
+			return { stdout: path.join(options.cwd, '.venv', 'python') + '\n' };
+		},
 	});
-
-	test('Should not set the final environment immediately after switching', () => {
-		assert.ok(
-			!envRightAfter?.path?.includes(path.join('example-lib', '.venv')),
-			`Environment should not yet be set to example-lib immediately after switching, but got ${envRightAfter?.path}`
-		);
+	const dependencies: Record<string, unknown> = {
+		vscode: vscodeApi,
+		'@vscode/python-extension': { PythonExtension: { api: async () => pythonApi } },
+		child_process: { execFile },
+		fs: { openSync: () => 0, readSync: () => 0, closeSync() {}, existsSync: () => true },
+		path,
+		util: { promisify },
+	};
+	const extension = { exports: {} as typeof import('../extension') };
+	runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8'), {
+		exports: extension.exports,
+		require: (name: string) => {
+			assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
+			return dependencies[name];
+		},
+		Buffer,
+		console,
+		// Resolve timers at invocation time so each synchronous scenario can fake time.
+		setTimeout: (callback: () => void, delay: number) => setTimeout(callback, delay),
+		clearTimeout: (timer: ReturnType<typeof setTimeout>) => clearTimeout(timer),
 	});
+	await extension.exports.activate({ subscriptions: [] } as unknown as vscode.ExtensionContext);
+	assert.ok(onChange, 'Activation must register the editor-change handler');
+	return { onChange, lookups, selections };
+}
 
-	test('Should not set the final environment within the debounce window', () => {
-		assert.ok(
-			!envDuringDebounce?.path?.includes(path.join('example-lib', '.venv')),
-			`Environment should not yet be set to example-lib within debounce window (100 ms), but got ${envDuringDebounce?.path}`
-		);
-	});
+function withClock(scenario: () => void): void {
+	mock.timers.enable({ apis: ['setTimeout'] });
+	try {
+		scenario();
+	} finally {
+		// Restore the host clock before yielding to any other extension-host work.
+		mock.timers.reset();
+	}
+}
 
-	test('Should resolve to the last environment after the debounce fires', async () => {
-		// When python-envs is active, verify via its API (per-file scope)
-		if (envsApi) {
-			const libUri = vscode.Uri.file(path.join(fixturesFolder, 'example-lib', 'src', 'example_lib', '__init__.py'));
-			const envsEnv = await envsApi.getEnvironment(libUri);
-			assert.ok(
-				envsEnv && envsEnv.environmentPath &&
-				envsEnv.environmentPath.fsPath.includes(path.join('example-lib', '.venv')),
-				`Expected python-envs environment to include '${path.join('example-lib', '.venv')}', but got ${envsEnv?.environmentPath?.fsPath ?? 'undefined'}`
-			);
-			return;
+for (const useEnvsExtension of [false, true]) {
+	suite(`Debounce editor integration (${useEnvsExtension ? 'python-envs' : 'classic'} API)`, () => {
+		let extension: Awaited<ReturnType<typeof activateExtension>>;
+		setup(async () => { extension = await activateExtension(useEnvsExtension); });
+
+		async function assertSelections(projects: string[]) {
+			// All mocked I/O resolves immediately; let the real setup async chain finish.
+			await new Promise<void>(resolve => setImmediate(resolve));
+			assert.deepStrictEqual(extension.selections, projects.map(project => ({
+				interpreter: path.join('workspace', project, '.venv', 'python'),
+				scope: path.join('workspace', project),
+			})));
 		}
-		// Classic API check
-		assert.ok(
-			activeEnv?.path?.includes(path.join('example-lib', '.venv')),
-			`Expected path to include '${path.join('example-lib', '.venv')}', but got ${activeEnv?.path}`
-		);
-	});
 
-	test('Should invoke setupPythonEnvironment exactly once during rapid switching', function () {
-		const callsDuringTest = setupCountAfter - setupCountBefore;
-		assert.strictEqual(
-			callsDuringTest,
-			1,
-			`Expected setupPythonEnvironment to be called exactly 1 time (debounced), but it was called ${callsDuringTest} times`
-		);
+		test('Waits the full production 300 ms before starting environment setup', async () => {
+			withClock(() => {
+				extension.onChange(editor('app'));
+				assert.deepStrictEqual(extension.lookups, []);
+				mock.timers.tick(299);
+				assert.deepStrictEqual(extension.lookups, []);
+				mock.timers.tick(1);
+				assert.deepStrictEqual(extension.lookups, [path.join('workspace', 'app')]);
+			});
+			await assertSelections(['app']);
+		});
+
+		test('Restarts the delay and sets up only the last rapidly selected environment', async () => {
+			withClock(() => {
+				extension.onChange(editor('app'));
+				mock.timers.tick(100);
+				extension.onChange(editor('bare'));
+				mock.timers.tick(100);
+				extension.onChange(editor('lib'));
+				mock.timers.tick(299);
+				assert.deepStrictEqual(extension.lookups, []);
+				mock.timers.tick(1);
+				assert.deepStrictEqual(extension.lookups, [path.join('workspace', 'lib')]);
+				mock.timers.tick(1000);
+				assert.deepStrictEqual(extension.lookups, [path.join('workspace', 'lib')]);
+			});
+			await assertSelections(['lib']);
+		});
+
+		test('Handles editor changes spaced beyond the delay separately', async () => {
+			withClock(() => {
+				extension.onChange(editor('app'));
+				mock.timers.tick(300);
+				extension.onChange(editor('lib'));
+				mock.timers.tick(300);
+				assert.deepStrictEqual(extension.lookups, [
+					path.join('workspace', 'app'), path.join('workspace', 'lib'),
+				]);
+			});
+			await assertSelections(['app', 'lib']);
+		});
+
+		for (const [name, nextEditor] of [
+			['cleared', undefined],
+			['changed to non-Python', editor('notes', 'plaintext')],
+		] as const) {
+			test(`Cancels pending Python setup when the editor is ${name}`, async () => {
+				withClock(() => {
+					extension.onChange(editor('app'));
+					mock.timers.tick(100);
+					extension.onChange(nextEditor);
+					mock.timers.tick(1000);
+					assert.deepStrictEqual(extension.lookups, []);
+				});
+				await assertSelections([]);
+			});
+		}
 	});
-});
+}

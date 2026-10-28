@@ -10,18 +10,16 @@ const execFileAsync = promisify(execFile);
 
 const log = vscode.window.createOutputChannel("uv Auto venv", { log: true });
 
-// ── Testing instrumentation ─────────────────────────────────────────────
-
-let setupCallCount = 0;
-
-export interface TestingApi {
-	/** Number of times setupPythonEnvironment has been called. */
-	getSetupCallCount(): number;
-	/** Reset the counter (call before a test scenario). */
-	resetSetupCallCount(): void;
-}
-
 // ── Helpers ──────────────────────────────────────────────────────────────
+
+/** Run the callback once changes have stopped for the given delay. */
+function debounce<T>(callback: (value: T) => void, delay: number): (value: T) => void {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	return (value) => {
+		clearTimeout(timer);
+		timer = setTimeout(() => callback(value), delay);
+	};
+}
 
 /**
  * Check whether the user has opted into the new Python Environments
@@ -231,7 +229,6 @@ async function setupPythonEnvironment(
 	pythonApi: PythonExtension,
 	refreshEnvironment = false
 ): Promise<void> {
-	setupCallCount++;
 	const filePath = editor.document.uri.fsPath;
 	const fileUri = editor.document.uri;
 	const fileDir = path.dirname(filePath);
@@ -275,7 +272,7 @@ async function setupPythonEnvironment(
 
 export async function activate(
 	context: vscode.ExtensionContext
-): Promise<TestingApi> {
+): Promise<void> {
 	const pythonApi = await PythonExtension.api();
 
 	// When python.useEnvironmentsExtension is on, debugpy and Pylance read
@@ -299,25 +296,16 @@ export async function activate(
 
 	// Re-evaluate every time the user switches tabs, debounced to avoid
 	// spawning unnecessary `uv` sub-processes during rapid tab cycling.
-	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 	const onEditorChange = vscode.window.onDidChangeActiveTextEditor(
-		(editor) => {
-			if (debounceTimer) {
-				clearTimeout(debounceTimer);
+		debounce((editor: vscode.TextEditor | undefined) => {
+			if (editor && editor.document.languageId === "python") {
+				setupPythonEnvironment(editor, envsApi, pythonApi).catch(
+					(err) => {
+						console.error("Failed to setup Python environment:", err);
+					}
+				);
 			}
-			debounceTimer = setTimeout(() => {
-				if (editor && editor.document.languageId === "python") {
-					setupPythonEnvironment(editor, envsApi, pythonApi).catch(
-						(err) => {
-							console.error(
-								"Failed to setup Python environment:",
-								err
-							);
-						}
-					);
-				}
-			}, 300);
-		}
+		}, 300)
 	);
 
 	// Manual command
@@ -336,11 +324,6 @@ export async function activate(
 	);
 
 	context.subscriptions.push(onEditorChange, manualCmd);
-
-	return {
-		getSetupCallCount: () => setupCallCount,
-		resetSetupCallCount: () => { setupCallCount = 0; },
-	};
 }
 
 export function deactivate(): void { }
