@@ -4,6 +4,19 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 
 <!-- Format based on [Keep a Changelog](https://keepachangelog.com/). -->
 
+## [Unreleased]
+
+### Changed
+
+- With Python Environments enabled, regular uv projects are registered at their `pyproject.toml` folders and keep independent environment assignments. Project folders are saved in workspace settings when first opened.
+- PEP 723 scripts switch their existing shared scope without creating per-script project entries. Scripts inside regular projects are skipped to protect the project's interpreter; a separate scripts folder can be registered as their shared scope.
+- Recommended settings now include Pylance's `python.analysis.usePerProjectEnvironments` for project-aware import resolution and type checking.
+
+### Fixed
+
+- Failed script lookups no longer fall through to regular-project interpreter selection. Python Environments resolution failures retain the current selection instead of falling back to workspace-wide switching.
+- Discarded stale tab-selection results and serialized interpreter updates to prevent slow lookups from overwriting newer selections.
+
 ## [1.5.2] - 2026-07-26
 
 ### Changed
