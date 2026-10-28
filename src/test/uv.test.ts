@@ -9,7 +9,8 @@ suite('Real uv environment discovery', function () {
 	this.timeout(30000);
 	let root: string;
 
-	setup(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'uv-auto-venv-')); });
+	// uv canonicalizes paths; macOS's temporary directory can contain /var symlinks.
+	setup(() => { root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'uv-auto-venv-'))); });
 	teardown(() => { fs.rmSync(root, { recursive: true, force: true }); });
 
 	function createProject(name: string): string {
