@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as cp from 'child_process';
 import * as fs from 'fs';
+import type { PythonEnvironmentApi } from '@vscode/python-environments';
 
 suite('uv-auto-venv Extension Test Suite', function () {
 	this.timeout(100000);
@@ -21,6 +22,7 @@ suite('uv-auto-venv Extension Test Suite', function () {
 	];
 
 	let api: any;
+	let envsApi: PythonEnvironmentApi | undefined;
 	let fixturesFolder: string;
 
 	suiteSetup(async () => {
@@ -57,7 +59,19 @@ suite('uv-auto-venv Extension Test Suite', function () {
 		}
 
 		api = pythonExtension.exports;
+		if (vscode.workspace.getConfiguration('python').get('useEnvironmentsExtension')) {
+			const envsExtension = vscode.extensions.getExtension<PythonEnvironmentApi>('ms-python.vscode-python-envs');
+			assert.ok(envsExtension, 'Python Environments extension must be installed for the hybrid tests');
+			envsApi = await envsExtension.activate();
+		}
 	});
+
+	async function environmentPath(file: vscode.Uri): Promise<string> {
+		if (envsApi) {
+			return (await envsApi.getEnvironment(file))?.execInfo.run.executable ?? '';
+		}
+		return api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder))?.path ?? '';
+	}
 
 	for (const project of projects) {
 		test(`Should activate and switch to project environment for ${project.name}`, async () => {
@@ -67,21 +81,96 @@ suite('uv-auto-venv Extension Test Suite', function () {
 			const document = await vscode.workspace.openTextDocument(vscode.Uri.file(appFilePath));
 			await vscode.window.showTextDocument(document);
 
-			let activeEnv = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
+			const fileUri = vscode.Uri.file(appFilePath);
+			let activePath = await environmentPath(fileUri);
 
 			// Poll for the extension to process the editor change (up to 10 seconds)
 			const timeout = Date.now() + 10000;
 			while (Date.now() < timeout) {
-				if (activeEnv && activeEnv.path && activeEnv.path.includes(project.expectedPath)) {
+				if (activePath.includes(project.expectedPath)) {
 					break;
 				}
 				await new Promise(resolve => setTimeout(resolve, 100));
-				activeEnv = api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder));
+				activePath = await environmentPath(fileUri);
 			}
 
 			// The environment should be set to the corresponding project venv or uv cache
-			const actualPath = activeEnv ? activeEnv.path : 'undefined';
-			assert.ok(actualPath.includes(project.expectedPath), `Expected path to include '${project.expectedPath}', but got ${actualPath}`);
+			assert.ok(activePath.includes(project.expectedPath), `Expected path to include '${project.expectedPath}', but got ${activePath}`);
 		});
 	}
+
+	test('Script switching preserves project assignments and never adds script settings entries', async function () {
+		if (!envsApi) {
+			this.skip();
+		}
+		const regularProjects = projects.filter(p => p.name !== 'example-script');
+		// Explicitly reload each project so automatic discovery cannot satisfy the assertions alone.
+		for (const project of regularProjects) {
+			await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(
+				vscode.Uri.file(path.join(fixturesFolder, project.name, project.file))
+			));
+			await vscode.commands.executeCommand('uv-auto-venv.reloadVenv');
+		}
+		const secondScript = path.join(fixturesFolder, 'example-script', 'second.py');
+		fs.writeFileSync(secondScript, '# /// script\n# dependencies = []\n# ///\nprint("second")\n');
+		cp.execFileSync('uv', ['sync', '--script', secondScript, '--link-mode=copy']);
+		for (const script of [path.join(fixturesFolder, 'example-script', 'main.py'), secondScript]) {
+			await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(script)));
+			await vscode.commands.executeCommand('uv-auto-venv.reloadVenv');
+			const expected = cp.execFileSync('uv', ['python', 'find', '--script', script], { encoding: 'utf8' }).trim();
+			assert.strictEqual(await environmentPath(vscode.Uri.file(fixturesFolder)), expected);
+			for (const project of regularProjects) {
+				const file = vscode.Uri.file(path.join(fixturesFolder, project.name, project.file));
+				assert.ok((await environmentPath(file)).includes(project.expectedPath), `${project.name} lost its fixed assignment`);
+			}
+		}
+		// Registration is asynchronous in the public API; allow the settings write to settle.
+		let paths: string[] = [];
+		const deadline = Date.now() + 10000;
+		do {
+			const settings = vscode.workspace.getConfiguration('python-envs').get<{ path: string }[]>('pythonProjects', []);
+			paths = settings.map(p => path.resolve(fixturesFolder, p.path));
+			if (regularProjects.every(p => paths.includes(path.join(fixturesFolder, p.name)))) {
+				break;
+			}
+			await new Promise(resolve => setTimeout(resolve, 100));
+		} while (Date.now() < deadline);
+		assert.deepStrictEqual(paths.sort(), regularProjects.map(p => path.join(fixturesFolder, p.name)).sort());
+		assert.strictEqual(envsApi.getPythonProjects().length, regularProjects.length + 1);
+	});
+
+	test('Pylance keeps project imports resolved while the shared script environment changes', async function () {
+		if (!envsApi) {
+			this.skip();
+		}
+		const pylance = vscode.extensions.getExtension('ms-python.vscode-pylance');
+		assert.ok(pylance, 'Pylance must be installed for project import-resolution tests');
+		await pylance.activate();
+		const appProbe = vscode.Uri.file(path.join(fixturesFolder, 'example-app', 'environment_probe.py'));
+		const scriptProbe = vscode.Uri.file(path.join(fixturesFolder, 'example-script', 'environment_probe.py'));
+		const imports = 'import cowsay\nimport missing_uv_auto_venv_test_module\n';
+		fs.writeFileSync(appProbe.fsPath, imports);
+		fs.writeFileSync(scriptProbe.fsPath, '# /// script\n# dependencies = []\n# ///\n' + imports);
+		cp.execFileSync('uv', ['sync', '--script', scriptProbe.fsPath, '--link-mode=copy']);
+		// Pin both documents: replacing a preview tab closes it and clears its diagnostics.
+		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(appProbe), { preview: false });
+		await vscode.commands.executeCommand('uv-auto-venv.reloadVenv');
+		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(scriptProbe), { preview: false });
+		await vscode.commands.executeCommand('uv-auto-venv.reloadVenv');
+
+		const missingImports = (file: vscode.Uri) => vscode.languages.getDiagnostics(file)
+			.filter(d => (typeof d.code === 'object' ? d.code.value : d.code) === 'reportMissingImports')
+			.map(d => d.message);
+		const deadline = Date.now() + 30000;
+		do {
+			if (missingImports(appProbe).some(m => m.includes('missing_uv_auto_venv_test_module'))
+				&& missingImports(scriptProbe).some(m => m.includes('cowsay'))) {
+				break;
+			}
+			await new Promise(resolve => setTimeout(resolve, 100));
+		} while (Date.now() < deadline);
+		assert.ok(missingImports(scriptProbe).some(m => m.includes('cowsay')), 'The script environment should not contain cowsay');
+		assert.ok(missingImports(appProbe).some(m => m.includes('missing_uv_auto_venv_test_module')), 'Pylance must finish analyzing the project probe');
+		assert.ok(!missingImports(appProbe).some(m => m.includes('cowsay')), 'The project should still resolve cowsay from its own environment');
+	});
 });
