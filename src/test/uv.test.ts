@@ -56,18 +56,21 @@ suite('Real uv environment discovery', function () {
 		});
 
 		test(`Uses a script's local uv cache configuration (${useEnvsExtension ? 'python-envs' : 'classic'})`, async () => {
+			const env = { ...process.env };
+			// setup-uv exports this in CI; it would override the configuration being tested.
+			delete env.UV_CACHE_DIR;
 			const directory = path.join(root, 'scripts');
 			const cache = path.join(root, 'custom-cache');
 			fs.mkdirSync(directory);
 			fs.writeFileSync(path.join(directory, 'uv.toml'), `cache-dir = ${JSON.stringify(cache)}\n`);
 			const script = path.join(directory, 'main.py');
 			fs.writeFileSync(script, '# /// script\n# requires-python = ">=3.12"\n# dependencies = []\n# ///\n');
-			cp.execFileSync('uv', ['sync', '--script', script], { cwd: directory, stdio: 'pipe' });
+			cp.execFileSync('uv', ['sync', '--script', script], { cwd: directory, env, stdio: 'pipe' });
 			const expected = cp.execFileSync('uv', ['python', 'find', '--script', script], {
-				cwd: directory, encoding: 'utf8',
+				cwd: directory, env, encoding: 'utf8',
 			}).trim();
 			assert.ok(expected.startsWith(cache + path.sep), 'The fixture must use the custom cache');
-			const extension = await activateExtension(useEnvsExtension, { realUv: true, workspaceRoot: root });
+			const extension = await activateExtension(useEnvsExtension, { realUv: true, workspaceRoot: root, env });
 			await extension.reload(fileEditor(script));
 			const selected = extension.selections.at(-1)?.interpreter;
 			assert.ok(selected, `Expected the script environment, got warnings: ${extension.warnings}`);
@@ -76,17 +79,19 @@ suite('Real uv environment discovery', function () {
 
 		for (const inlineCache of [JSON.stringify('custom cache'), "'''custom cache'''", '"""custom cache"""']) {
 			test(`Uses inline cache-dir = ${inlineCache} (${useEnvsExtension ? 'python-envs' : 'classic'})`, async () => {
+				const env = { ...process.env };
+				delete env.UV_CACHE_DIR;
 				const directory = path.join(root, 'scripts');
 				fs.mkdirSync(directory);
 				const script = path.join(directory, 'main.py');
 				fs.writeFileSync(script, '# /// script\n# requires-python = ">=3.12"\n# dependencies = []\n'
 					+ `# [tool.uv]\n# cache-dir = ${inlineCache}\n# ///\n`);
-				cp.execFileSync('uv', ['sync', '--script', script], { cwd: directory, stdio: 'pipe' });
+				cp.execFileSync('uv', ['sync', '--script', script], { cwd: directory, env, stdio: 'pipe' });
 				const expected = cp.execFileSync('uv', ['python', 'find', '--script', script], {
-					cwd: directory, encoding: 'utf8',
+					cwd: directory, env, encoding: 'utf8',
 				}).trim();
 				assert.ok(expected.startsWith(path.join(directory, 'custom cache') + path.sep));
-				const extension = await activateExtension(useEnvsExtension, { realUv: true, workspaceRoot: root });
+				const extension = await activateExtension(useEnvsExtension, { realUv: true, workspaceRoot: root, env });
 				await extension.reload(fileEditor(script));
 				assert.strictEqual(extension.selections.at(-1)?.interpreter, expected,
 					`Expected the inline cache environment, got warnings: ${extension.warnings}`);
