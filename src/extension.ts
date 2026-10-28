@@ -108,24 +108,84 @@ async function uvPythonFind(cwd: string): Promise<string | null> {
 	}
 }
 
+/** Find the nearest project marker without registering directories outside the workspace. */
+function findProjectRoot(fileDir: string, workspaceFolder: vscode.WorkspaceFolder): vscode.Uri | undefined {
+	let directory = fileDir;
+	const workspacePath = workspaceFolder.uri.fsPath;
+	while (true) {
+		if (fs.existsSync(path.join(directory, "pyproject.toml"))) {
+			return vscode.Uri.file(directory);
+		}
+		if (directory === workspacePath || path.dirname(directory) === directory) {
+			return undefined;
+		}
+		directory = path.dirname(directory);
+	}
+}
+
+let interpreterUpdate = Promise.resolve();
+
+/** Serialize mutations so a slow selection cannot overwrite a newer one. */
+function setInterpreter(...args: Parameters<typeof applyInterpreter>): Promise<void> {
+	const update = interpreterUpdate.then(() => applyInterpreter(...args));
+	interpreterUpdate = update.catch(err => log.warn(`Interpreter update failed: ${err}`));
+	return update;
+}
+
+/** The public registration API returns void before its settings write finishes. */
+async function registerPythonProject(
+	api: PythonEnvironmentApi,
+	projectUri: vscode.Uri,
+	workspaceFolder: vscode.WorkspaceFolder
+): Promise<void> {
+	if (api.getPythonProjects().some(project => project.uri.toString() === projectUri.toString())) {
+		return;
+	}
+	await new Promise<void>((resolve, reject) => {
+		const isSaved = () => vscode.workspace.getConfiguration("python-envs", projectUri)
+			.get<{ path: string; workspace?: string }[]>("pythonProjects", [])
+			.some(project => (!project.workspace || project.workspace === workspaceFolder.name)
+				&& path.resolve(workspaceFolder.uri.fsPath, project.path) === projectUri.fsPath);
+		const subscription = vscode.workspace.onDidChangeConfiguration(() => check());
+		const timer = setTimeout(() => finish(new Error(`Timed out saving project ${projectUri.fsPath}`)), 10000);
+		function finish(error?: Error) {
+			clearTimeout(timer);
+			subscription.dispose();
+			if (error) {
+				reject(error);
+			} else {
+				resolve();
+			}
+		}
+		function check() {
+			if (isSaved()) {
+				finish();
+			}
+		}
+		try {
+			api.addPythonProject({ name: path.basename(projectUri.fsPath), uri: projectUri });
+			check();
+		} catch (error) {
+			finish(error instanceof Error ? error : new Error(String(error)));
+		}
+	});
+	log.info(`[python-envs] Registered project ${projectUri.fsPath}`);
+}
+
 /**
- * Attempt to set the active Python interpreter.
- *
- * When `envsApi` is available (python.useEnvironmentsExtension is on) the
- * interpreter is set through the new python-envs API which supports
- * per-file scope — exactly what PEP 723 inline scripts need, and what
- * debugpy / Pylance actually read when that flag is enabled.
- *
- * Falls back to the classic `updateActiveEnvironmentPath` otherwise.
+ * Assign a regular project or switch the shared script scope through python-envs.
+ * Classic mode keeps selecting the interpreter for the workspace folder.
  */
-async function setInterpreter(
+async function applyInterpreter(
 	envsApi: PythonEnvironmentApi | undefined,
 	pythonApi: PythonExtension,
 	pythonPath: string,
-	fileUri: vscode.Uri,
+	scope: vscode.Uri | undefined,
 	workspaceFolder: vscode.WorkspaceFolder | undefined,
 	label: string,
-	refreshEnvironment = false
+	refreshEnvironment = false,
+	registerProject = false,
+	isCurrent = () => true
 ): Promise<void> {
 	const config = vscode.workspace.getConfiguration("uv-auto-venv");
 	const showNotifications = config.get<boolean>("showNotifications", true);
@@ -137,18 +197,29 @@ async function setInterpreter(
 				vscode.Uri.file(pythonPath)
 			);
 
+			if (!isCurrent()) {
+				return;
+			}
+
 			if (env) {
+				if (registerProject && scope && workspaceFolder) {
+					await registerPythonProject(envsApi, scope, workspaceFolder);
+				}
+
 				// Skip if already set (unless forced refresh)
 				if (!refreshEnvironment) {
-					const current = await envsApi.getEnvironment(fileUri);
-					if (current?.envId.id === env.envId.id) {
+					const current = await envsApi.getEnvironment(scope);
+					if (current?.envId.id === env.envId.id && current?.envId.managerId === env.envId.managerId) {
 						return;
 					}
 				}
 
-				await envsApi.setEnvironment(fileUri, env);
+				if (!isCurrent()) {
+					return;
+				}
+				await envsApi.setEnvironment(scope, env);
 				log.info(
-					`[python-envs] ${label} interpreter set to ${env.environmentPath.fsPath} (scope: ${fileUri.fsPath})`
+					`[python-envs] ${label} interpreter set to ${env.environmentPath.fsPath} (scope: ${scope?.fsPath ?? "global"})`
 				);
 
 				if (showNotifications) {
@@ -168,18 +239,21 @@ async function setInterpreter(
 				return;
 			}
 
-			log.warn(
-				`python-envs could not resolve ${pythonPath}; falling back to classic API`
-			);
+			log.warn(`python-envs could not resolve ${pythonPath}; keeping the current environment`);
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err);
 			log.warn(
-				`python-envs setEnvironment failed: ${message}; falling back to classic API`
+				`python-envs setEnvironment failed: ${message}; keeping the current environment`
 			);
 		}
+		// A classic fallback here would overwrite the shared workspace selection.
+		return;
 	}
 
 	// ── classic path (workspace-folder scope) ────────────────────────────
+	if (!isCurrent()) {
+		return;
+	}
 	const currentEnv = pythonApi.environments.getActiveEnvironmentPath(
 		workspaceFolder?.uri
 	);
@@ -192,6 +266,10 @@ async function setInterpreter(
 		);
 	} else if (currentEnv.path === pythonPath) {
 		return; // already set
+	}
+
+	if (!isCurrent()) {
+		return;
 	}
 
 	try {
@@ -227,8 +305,12 @@ async function setupPythonEnvironment(
 	editor: vscode.TextEditor,
 	envsApi: PythonEnvironmentApi | undefined,
 	pythonApi: PythonExtension,
-	refreshEnvironment = false
+	refreshEnvironment = false,
+	isCurrent = () => true
 ): Promise<void> {
+	if (editor.document.uri.scheme !== "file") {
+		return;
+	}
 	const filePath = editor.document.uri.fsPath;
 	const fileUri = editor.document.uri;
 	const fileDir = path.dirname(filePath);
@@ -236,26 +318,39 @@ async function setupPythonEnvironment(
 
 	// 1. PEP 723 inline scripts  ─  `uv python find --script <file>`
 	if (filePath.endsWith(".py") && hasPep723Metadata(filePath)) {
+		// Use the owning folder's shared selection, never create a per-script project.
+		const owner = envsApi?.getPythonProject(fileUri);
+		const scope = owner?.uri ?? workspaceFolder?.uri;
+		if (envsApi && scope && fs.existsSync(path.join(scope.fsPath, "pyproject.toml"))) {
+			log.warn(
+				`PEP 723 script ${filePath} is inside the regular project ${scope.fsPath}; ` +
+				"move scripts to a separate scope to keep the project's environment fixed"
+			);
+			return;
+		}
 		const pythonPath = await uvPythonFindScript(filePath);
-		if (pythonPath && fs.existsSync(pythonPath)) {
+		if (pythonPath && fs.existsSync(pythonPath) && isCurrent()) {
 			await setInterpreter(
 				envsApi,
 				pythonApi,
 				pythonPath,
-				fileUri,
+				scope,
 				workspaceFolder,
 				"PEP 723 script",
-				refreshEnvironment
+				refreshEnvironment,
+				false,
+				isCurrent
 			);
-			return;
 		}
+		// A failed script lookup must not select the containing project's interpreter.
+		return;
 	}
 
 	// 2. Normal project  ─  `uv python find` from the file's directory
 	const pythonPath = await uvPythonFind(fileDir);
-	if (pythonPath && fs.existsSync(pythonPath)) {
-		// For normal projects, scope to workspace folder (not individual file)
-		const scope = workspaceFolder?.uri ?? fileUri;
+	if (pythonPath && fs.existsSync(pythonPath) && isCurrent()) {
+		const projectRoot = envsApi && workspaceFolder ? findProjectRoot(fileDir, workspaceFolder) : undefined;
+		const scope = projectRoot ?? envsApi?.getPythonProject(fileUri)?.uri ?? workspaceFolder?.uri;
 		await setInterpreter(
 			envsApi,
 			pythonApi,
@@ -263,7 +358,9 @@ async function setupPythonEnvironment(
 			scope,
 			workspaceFolder,
 			"project",
-			refreshEnvironment
+			refreshEnvironment,
+			projectRoot !== undefined,
+			isCurrent
 		);
 	}
 }
@@ -288,24 +385,22 @@ export async function activate(
 		log.info("Using classic ms-python.python API");
 	}
 
-	// Activate for the already-open editor
-	const activeEditor = vscode.window.activeTextEditor;
-	if (activeEditor && activeEditor.document.languageId === "python") {
-		await setupPythonEnvironment(activeEditor, envsApi, pythonApi);
-	}
-
 	// Re-evaluate every time the user switches tabs, debounced to avoid
 	// spawning unnecessary `uv` sub-processes during rapid tab cycling.
+	let editorVersion = 0;
+	const onDebouncedEditorChange = debounce(({ editor, version }: {
+		editor: vscode.TextEditor | undefined; version: number;
+	}) => {
+		if (editor && editor.document.languageId === "python") {
+			setupPythonEnvironment(editor, envsApi, pythonApi, false, () => version === editorVersion).catch(
+				(err) => {
+					log.warn(`Failed to setup Python environment: ${err}`);
+				}
+			);
+		}
+	}, 300);
 	const onEditorChange = vscode.window.onDidChangeActiveTextEditor(
-		debounce((editor: vscode.TextEditor | undefined) => {
-			if (editor && editor.document.languageId === "python") {
-				setupPythonEnvironment(editor, envsApi, pythonApi).catch(
-					(err) => {
-						console.error("Failed to setup Python environment:", err);
-					}
-				);
-			}
-		}, 300)
+		editor => onDebouncedEditorChange({ editor, version: ++editorVersion })
 	);
 
 	// Manual command
@@ -314,7 +409,8 @@ export async function activate(
 		async () => {
 			const editor = vscode.window.activeTextEditor;
 			if (editor) {
-				await setupPythonEnvironment(editor, envsApi, pythonApi, true);
+				const version = ++editorVersion;
+				await setupPythonEnvironment(editor, envsApi, pythonApi, true, () => version === editorVersion);
 			} else {
 				vscode.window.showWarningMessage(
 					"uv-auto-venv: no active editor"
@@ -324,6 +420,13 @@ export async function activate(
 	);
 
 	context.subscriptions.push(onEditorChange, manualCmd);
+
+	// Listen for tab changes before starting the initial lookup so it can become stale too.
+	const activeEditor = vscode.window.activeTextEditor;
+	if (activeEditor && activeEditor.document.languageId === "python") {
+		const version = editorVersion;
+		await setupPythonEnvironment(activeEditor, envsApi, pythonApi, false, () => version === editorVersion);
+	}
 }
 
 export function deactivate(): void { }
