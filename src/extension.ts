@@ -5,7 +5,10 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { PythonExtension } from "@vscode/python-extension";
 import type { PythonEnvironmentApi } from "@vscode/python-environments";
+import type * as Toml from "smol-toml" with { "resolution-mode": "import" };
 
+// smol-toml shares ESM declarations with its CommonJS entry point.
+const { parse: parseToml }: typeof Toml = require("smol-toml");
 const execFileAsync = promisify(execFile);
 
 const log = vscode.window.createOutputChannel("uv Auto venv", { log: true });
@@ -77,13 +80,38 @@ function hasPep723Metadata(filePath: string): boolean {
  */
 async function uvPythonFindScript(filePath: string): Promise<string | null> {
 	try {
-		const { stdout } = await execFileAsync("uv", [
-			"python",
-			"find",
-			"--script",
-			filePath,
+		const options = { cwd: path.dirname(filePath), env: process.env };
+		const cacheArgs = ["cache", "dir"];
+		// `uv cache dir` cannot read inline settings; supply the script's cache override.
+		// Environment variables take precedence over inline configuration in uv.
+		if (!process.env.UV_CACHE_DIR) {
+			const block = fs.readFileSync(filePath, "utf8")
+				.match(/^# \/\/\/ script[ \t]*\r?\n((?:#(?: .*)?\r?\n)*?)# \/\/\/[ \t]*\r?$/m);
+			if (block) {
+				const metadata = parseToml(block[1].split(/\r?\n/).map(line => line.slice(2)).join("\n")) as {
+					tool?: { uv?: { "cache-dir"?: string } };
+				};
+				const cacheDir = metadata.tool?.uv?.["cache-dir"];
+				if (typeof cacheDir === "string") {
+					cacheArgs.push("--cache-dir", cacheDir);
+				}
+			}
+		}
+		const [{ stdout }, { stdout: cacheDir }] = await Promise.all([
+			execFileAsync("uv", ["python", "find", "--script", filePath], options),
+			execFileAsync("uv", cacheArgs, options),
 		]);
-		return stdout.trim() || null;
+		const pythonPath = stdout.trim();
+		const cachePath = cacheDir.trim() ? path.resolve(options.cwd, cacheDir.trim()) : "";
+		const relativePath = path.relative(cachePath, pythonPath);
+		// Without a cached script environment, uv can return base Python or a project's .venv.
+		if (!pythonPath || !cachePath || path.isAbsolute(relativePath)
+			|| relativePath === ".." || relativePath.startsWith(".." + path.sep)
+			|| !fs.existsSync(path.join(path.dirname(path.dirname(pythonPath)), "pyvenv.cfg"))) {
+			log.warn(`No cached environment found for script ${filePath}; keeping the current environment`);
+			return null;
+		}
+		return pythonPath;
 	} catch (err: unknown) {
 		const message = err instanceof Error ? err.message : String(err);
 		log.warn(`uv python find --script failed for ${filePath}: ${message}`);
@@ -97,8 +125,16 @@ async function uvPythonFindScript(filePath: string): Promise<string | null> {
  */
 async function uvPythonFind(cwd: string): Promise<string | null> {
 	try {
+		// An environment inherited from the shell must not override this project's .venv.
+		const env = { ...process.env };
+		for (const key of Object.keys(env)) {
+			if (["VIRTUAL_ENV", "CONDA_PREFIX"].includes(key.toUpperCase())) {
+				delete env[key];
+			}
+		}
 		const { stdout } = await execFileAsync("uv", ["python", "find"], {
 			cwd,
+			env,
 		});
 		return stdout.trim() || null;
 	} catch (err: unknown) {
@@ -108,15 +144,35 @@ async function uvPythonFind(cwd: string): Promise<string | null> {
 	}
 }
 
-/** Find the nearest project marker without registering directories outside the workspace. */
-function findProjectRoot(fileDir: string, workspaceFolder: vscode.WorkspaceFolder): vscode.Uri | undefined {
+/** Find the nearest project marker within a folder scope. */
+function findProjectRoot(fileDir: string, scope: vscode.Uri): vscode.Uri | undefined {
+	const relativeDirectory = path.relative(scope.fsPath, fileDir);
+	if (path.isAbsolute(relativeDirectory) || relativeDirectory === ".."
+		|| relativeDirectory.startsWith(".." + path.sep)) {
+		return undefined;
+	}
 	let directory = fileDir;
-	const workspacePath = workspaceFolder.uri.fsPath;
 	while (true) {
-		if (fs.existsSync(path.join(directory, "pyproject.toml"))) {
-			return vscode.Uri.file(directory);
+		const pyprojectPath = path.join(directory, "pyproject.toml");
+		if (fs.existsSync(pyprojectPath)) {
+			try {
+				const metadata = parseToml(fs.readFileSync(pyprojectPath, "utf8")) as {
+					project?: unknown;
+					"build-system"?: unknown;
+					tool?: { uv?: { workspace?: unknown }; poetry?: unknown };
+				};
+				// Tool settings alone do not give a folder its own Python environment.
+				if (metadata.project !== undefined || metadata["build-system"] !== undefined
+					|| metadata.tool?.uv?.workspace !== undefined || metadata.tool?.poetry !== undefined) {
+					return vscode.Uri.file(directory);
+				}
+			} catch (error) {
+				// Preserve isolation when project metadata is temporarily invalid or unreadable.
+				log.warn(`Could not read project metadata at ${pyprojectPath}: ${error}`);
+				return vscode.Uri.file(directory);
+			}
 		}
-		if (directory === workspacePath || path.dirname(directory) === directory) {
+		if (path.relative(scope.fsPath, directory) === "" || path.dirname(directory) === directory) {
 			return undefined;
 		}
 		directory = path.dirname(directory);
@@ -193,6 +249,15 @@ async function applyInterpreter(
 	// ── python-envs path (preferred when available) ─────────────────────
 	if (envsApi) {
 		try {
+			if (!isCurrent()) {
+				return;
+			}
+			if (refreshEnvironment) {
+				await envsApi.refreshEnvironments(scope);
+				if (!isCurrent()) {
+					return;
+				}
+			}
 			const env = await envsApi.resolveEnvironment(
 				vscode.Uri.file(pythonPath)
 			);
@@ -259,6 +324,9 @@ async function applyInterpreter(
 	);
 	if (refreshEnvironment) {
 		await pythonApi.environments.refreshEnvironments();
+		if (!isCurrent()) {
+			return;
+		}
 		// Clear cached path first so the update is not treated as a no-op
 		await pythonApi.environments.updateActiveEnvironmentPath(
 			"",
@@ -268,7 +336,8 @@ async function applyInterpreter(
 		return; // already set
 	}
 
-	if (!isCurrent()) {
+	// Once clearing starts, finish reapplying. Newer selections wait in the mutation queue.
+	if (!refreshEnvironment && !isCurrent()) {
 		return;
 	}
 
@@ -321,9 +390,10 @@ async function setupPythonEnvironment(
 		// Use the owning folder's shared selection, never create a per-script project.
 		const owner = envsApi?.getPythonProject(fileUri);
 		const scope = owner?.uri ?? workspaceFolder?.uri;
-		if (envsApi && scope && fs.existsSync(path.join(scope.fsPath, "pyproject.toml"))) {
+		const projectRoot = envsApi && scope ? findProjectRoot(fileDir, scope) : undefined;
+		if (projectRoot) {
 			log.warn(
-				`PEP 723 script ${filePath} is inside the regular project ${scope.fsPath}; ` +
+				`PEP 723 script ${filePath} is inside the regular project ${projectRoot.fsPath}; ` +
 				"move scripts to a separate scope to keep the project's environment fixed"
 			);
 			return;
@@ -349,7 +419,7 @@ async function setupPythonEnvironment(
 	// 2. Normal project  ─  `uv python find` from the file's directory
 	const pythonPath = await uvPythonFind(fileDir);
 	if (pythonPath && fs.existsSync(pythonPath) && isCurrent()) {
-		const projectRoot = envsApi && workspaceFolder ? findProjectRoot(fileDir, workspaceFolder) : undefined;
+		const projectRoot = envsApi && workspaceFolder ? findProjectRoot(fileDir, workspaceFolder.uri) : undefined;
 		const scope = projectRoot ?? envsApi?.getPythonProject(fileUri)?.uri ?? workspaceFolder?.uri;
 		await setInterpreter(
 			envsApi,

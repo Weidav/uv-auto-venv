@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
 import { runInNewContext } from 'vm';
+import * as cp from 'child_process';
 import type * as vscode from 'vscode';
 
 type Editor = vscode.TextEditor | undefined;
@@ -20,6 +21,9 @@ export function fileEditor(file: string, languageId = 'python'): vscode.TextEdit
 }
 
 interface HarnessOptions {
+	realUv?: boolean;
+	env?: NodeJS.ProcessEnv;
+	cacheDir?: string;
 	workspaceRoot?: string;
 	files?: Record<string, string>;
 	projects?: string[];
@@ -27,11 +31,16 @@ interface HarnessOptions {
 	resolve?: boolean;
 	envsInstalled?: boolean;
 	persistProject?: (save: () => void) => void;
+	refreshEnvironments?: () => Promise<void>;
+	refreshEnvsEnvironments?: (scope: vscode.Uri | undefined) => Promise<void>;
+	resolveEnvironment?: (environmentPath: vscode.Uri) => Promise<Environment | undefined>;
+	selectClassic?: (interpreter: string) => Promise<void>;
 }
 
 interface Environment {
 	envId: { id: string; managerId: string };
 	environmentPath: vscode.Uri;
+	version?: string;
 }
 
 /** Load the real extension in isolation, replacing only external APIs and uv. */
@@ -58,16 +67,19 @@ export async function activateExtension(useEnvsExtension: boolean, options: Harn
 	const pythonApi = {
 		environments: {
 			getActiveEnvironmentPath: () => ({ path: '' }),
-			refreshEnvironments: async () => {},
+			refreshEnvironments: async () => { await options.refreshEnvironments?.(); },
 			updateActiveEnvironmentPath: async (interpreter: string, scope?: vscode.Uri) => {
 				const selection = { interpreter, scope: scope?.fsPath ?? 'global' };
 				classicSelections.push(selection);
 				selections.push(selection);
+				await options.selectClassic?.(interpreter);
 			},
 		},
 	};
 	const envsApi = {
-		resolveEnvironment: async (environmentPath: vscode.Uri) => options.resolve === false ? undefined : ({
+		refreshEnvironments: async (scope?: vscode.Uri) => { await options.refreshEnvsEnvironments?.(scope); },
+		resolveEnvironment: async (environmentPath: vscode.Uri) => options.resolveEnvironment
+			? options.resolveEnvironment(environmentPath) : options.resolve === false ? undefined : ({
 			envId: { id: environmentPath.fsPath, managerId: 'venv' }, environmentPath,
 		}),
 		getPythonProjects: () => [...projects.values()],
@@ -131,7 +143,11 @@ export async function activateExtension(useEnvsExtension: boolean, options: Harn
 	const execFile = Object.assign(() => assert.fail('Expected promisified execFile'), {
 		[promisify.custom]: async (command: string, args: string[], execOptions?: { cwd: string }) => {
 			assert.strictEqual(command, 'uv');
-			lookups.push(execOptions?.cwd ?? args[3]);
+			if (args[0] === 'cache') {
+				assert.deepStrictEqual(Array.from(args), ['cache', 'dir']);
+				return { stdout: options.cacheDir ?? path.join(options.workspaceRoot ?? 'workspace', 'cache') };
+			}
+			lookups.push(args[2] === '--script' ? args[3] : execOptions!.cwd);
 			if (options.findPython) {
 				return { stdout: await options.findPython(Array.from(args), execOptions?.cwd) };
 			}
@@ -142,8 +158,10 @@ export async function activateExtension(useEnvsExtension: boolean, options: Harn
 	const dependencies: Record<string, unknown> = {
 		vscode: vscodeApi,
 		'@vscode/python-extension': { PythonExtension: { api: async () => pythonApi } },
-		child_process: { execFile },
-		fs: {
+		'smol-toml': require('smol-toml'),
+		child_process: options.realUv ? cp : { execFile },
+		fs: options.realUv ? fs : {
+			readFileSync: (file: string) => options.files?.[file] ?? '',
 			openSync: (file: string) => { openFile = file; return 0; },
 			readSync: (_fd: number, buffer: Buffer) => buffer.write(options.files?.[openFile] ?? ''),
 			closeSync() {},
@@ -158,7 +176,7 @@ export async function activateExtension(useEnvsExtension: boolean, options: Harn
 			assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
 			return dependencies[name];
 		},
-		Buffer, console,
+		Buffer, console, process: { env: options.env ?? process.env },
 		setTimeout: (callback: () => void, delay: number) => setTimeout(callback, delay),
 		clearTimeout: (timer: ReturnType<typeof setTimeout>) => clearTimeout(timer),
 	});

@@ -11,8 +11,8 @@ const libFile = path.join(lib, 'src', 'lib', '__init__.py');
 const scriptA = path.join(root, 'scripts', 'a.py');
 const scriptB = path.join(root, 'scripts', 'b.py');
 const nestedScript = path.join(app, 'scripts', 'nested.py');
-const scriptAEnv = path.join(root, 'cache', 'a', 'python');
-const scriptBEnv = path.join(root, 'cache', 'b', 'python');
+const scriptAEnv = path.join(root, 'cache', 'a', 'bin', 'python');
+const scriptBEnv = path.join(root, 'cache', 'b', 'bin', 'python');
 const appEnv = path.join(app, '.venv', 'python');
 const libEnv = path.join(lib, '.venv', 'python');
 const metadata = '# /// script\n# dependencies = []\n# ///\n';
@@ -22,6 +22,8 @@ const files = {
 	[appFile]: '', [libFile]: '',
 	[scriptA]: metadata, [scriptB]: metadata, [nestedScript]: metadata,
 	[appEnv]: '', [libEnv]: '', [scriptAEnv]: '', [scriptBEnv]: '',
+	[path.join(root, 'cache', 'a', 'pyvenv.cfg')]: '',
+	[path.join(root, 'cache', 'b', 'pyvenv.cfg')]: '',
 };
 
 async function findPython(args: string[], cwd?: string): Promise<string> {
@@ -70,6 +72,17 @@ suite('Hybrid project and script environments', () => {
 		assert.ok(extension.warnings.some(w => w.includes('separate scope')));
 	});
 
+	test('Protects an unregistered regular project when its script is opened first', async () => {
+		const extension = await activate();
+		await extension.reload(fileEditor(scriptA));
+		const selections = extension.selections.slice();
+		await extension.reload(fileEditor(nestedScript));
+		assert.deepStrictEqual(extension.selections, selections);
+		assert.deepStrictEqual(extension.lookups, [scriptA]);
+		assert.deepStrictEqual(extension.registrations, []);
+		assert.ok(extension.warnings.some(w => w.includes(app) && w.includes('separate scope')));
+	});
+
 	test('Allows a separately registered scripts folder inside a regular project', async () => {
 		const scriptsFolder = path.dirname(nestedScript);
 		const extension = await activate({ projects: [scriptsFolder] });
@@ -80,6 +93,37 @@ suite('Hybrid project and script environments', () => {
 		assert.strictEqual((await extension.envsApi.getEnvironment(uri(appFile)))?.environmentPath.fsPath, appEnv);
 	});
 
+	test('Allows a registered scripts folder before its containing project is opened', async () => {
+		const scriptsFolder = path.dirname(nestedScript);
+		const extension = await activate({ projects: [scriptsFolder] });
+		await extension.reload(fileEditor(nestedScript));
+		assert.deepStrictEqual(extension.selections, [{ scope: scriptsFolder, interpreter: scriptAEnv }]);
+		assert.deepStrictEqual(extension.registrations, []);
+		assert.deepStrictEqual(extension.warnings, []);
+	});
+
+	test('Respects an individually registered script scope', async () => {
+		const extension = await activate({ projects: [nestedScript] });
+		await extension.reload(fileEditor(nestedScript));
+		assert.deepStrictEqual(extension.selections, [{ scope: nestedScript, interpreter: scriptAEnv }]);
+		assert.deepStrictEqual(extension.registrations, []);
+		assert.deepStrictEqual(extension.warnings, []);
+	});
+
+	test('Protects unregistered projects nested inside a registered scripts folder', async () => {
+		const scriptsFolder = path.join(root, 'scripts');
+		const project = path.join(scriptsFolder, 'project');
+		const script = path.join(project, 'main.py');
+		const extension = await activate({ projects: [scriptsFolder], files: {
+			...files, [path.join(project, 'pyproject.toml')]: '[project]', [script]: metadata,
+		} });
+		await extension.reload(fileEditor(script));
+		assert.deepStrictEqual(extension.selections, []);
+		assert.deepStrictEqual(extension.lookups, []);
+		assert.deepStrictEqual(extension.registrations, []);
+		assert.ok(extension.warnings.some(w => w.includes(project) && w.includes('separate scope')));
+	});
+
 	test('Protects a regular project at the workspace root', async () => {
 		const extension = await activate({ files: { ...files, [path.join(root, 'pyproject.toml')]: '[project]' } });
 		await extension.reload(fileEditor(scriptA));
@@ -87,6 +131,51 @@ suite('Hybrid project and script environments', () => {
 		assert.deepStrictEqual(extension.registrations, []);
 		assert.ok(extension.warnings.some(w => w.includes('separate scope')));
 	});
+
+	for (const directory of [root, path.dirname(scriptA)]) {
+		test(`Switches scripts beneath tooling-only configuration at ${path.relative(root, directory) || 'the workspace root'}`, async () => {
+			const extension = await activate({ files: {
+				...files, [path.join(directory, 'pyproject.toml')]: '[tool.ruff]\nline-length = 100\n',
+			} });
+			await extension.reload(fileEditor(appFile));
+			await extension.reload(fileEditor(scriptA));
+			await extension.reload(fileEditor(scriptB));
+			assert.deepStrictEqual(extension.registrations, [app]);
+			assert.deepStrictEqual(extension.selections.slice(-2), [
+				{ scope: root, interpreter: scriptAEnv }, { scope: root, interpreter: scriptBEnv },
+			]);
+			assert.strictEqual((await extension.envsApi.getEnvironment(uri(appFile)))?.environmentPath.fsPath, appEnv);
+			assert.deepStrictEqual(extension.warnings, []);
+		});
+	}
+
+	test('Does not register a tooling-only folder as a regular project', async () => {
+		const looseFile = path.join(root, 'tools', 'helper.py');
+		const extension = await activate({ files: {
+			...files, [looseFile]: '', [path.join(path.dirname(looseFile), 'pyproject.toml')]: '[tool.pytest.ini_options]\n',
+		} });
+		await extension.reload(fileEditor(looseFile));
+		assert.deepStrictEqual(extension.registrations, []);
+		assert.deepStrictEqual(extension.selections, [{ scope: root, interpreter: appEnv }]);
+	});
+
+	test('Looks past tooling-only configuration to protect a containing project', async () => {
+		const extension = await activate({ files: {
+			...files, [path.join(path.dirname(nestedScript), 'pyproject.toml')]: '[tool.ruff]\n',
+		} });
+		await extension.reload(fileEditor(nestedScript));
+		assert.deepStrictEqual(extension.selections, []);
+		assert.ok(extension.warnings.some(w => w.includes(`regular project ${app};`) && w.includes('separate scope')));
+	});
+
+	for (const metadata of ['[build-system]\nrequires = []\n', '[tool.uv.workspace]\nmembers = ["apps/*"]\n', '[tool.poetry]\nname = "legacy"\n', '[project\n']) {
+		test(`Preserves project isolation for ${metadata.trim().split('\n')[0]}`, async () => {
+			const extension = await activate({ files: { ...files, [path.join(root, 'pyproject.toml')]: metadata } });
+			await extension.reload(fileEditor(scriptA));
+			assert.deepStrictEqual(extension.selections, []);
+			assert.ok(extension.warnings.some(w => w.includes('separate scope')));
+		});
+	}
 
 	test('Does not re-register projects restored from settings', async () => {
 		const extension = await activate({ projects: [app] });
@@ -102,6 +191,28 @@ suite('Hybrid project and script environments', () => {
 		assert.deepStrictEqual(extension.selections, []);
 		assert.deepStrictEqual(extension.registrations, []);
 	});
+
+	for (const useEnvsExtension of [false, true]) {
+		for (const [name, fallback, virtualEnv] of [
+			['project environment', appEnv, true],
+			['environment beside the cache', path.join(root, 'cache-other', 'bin', 'python'), true],
+			['base Python inside the cache', path.join(root, 'cache', 'base', 'bin', 'python'), false],
+		] as const) {
+			test(`Rejects a script's fallback to ${name} (${useEnvsExtension ? 'python-envs' : 'classic'})`, async () => {
+				const extension = await activateExtension(useEnvsExtension, {
+					workspaceRoot: root,
+					files: { ...files, [fallback]: '', ...(virtualEnv ? {
+						[path.join(path.dirname(path.dirname(fallback)), 'pyvenv.cfg')]: '',
+					} : {}) },
+					findPython: async () => fallback,
+				});
+				await extension.reload(fileEditor(scriptA));
+				assert.deepStrictEqual(extension.selections, []);
+				assert.deepStrictEqual(extension.registrations, []);
+				assert.ok(extension.warnings.some(w => w.includes('No cached environment')));
+			});
+		}
+	}
 
 	test('Keeps the shared selection intact when python-envs cannot resolve an environment', async () => {
 		const extension = await activate({ resolve: false });

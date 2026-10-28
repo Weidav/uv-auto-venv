@@ -1,6 +1,32 @@
 import { defineConfig } from '@vscode/test-cli';
+import { download, makeConsoleReporter, ProgressReportStage } from '@vscode/test-electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+
+// test-cli's extension installer ignores download.timeout. Prepare VS Code here
+// so version resolution can tolerate slow responses without retrying test failures.
+let version;
+const consoleReporter = await makeConsoleReporter();
+for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+        await download({
+            timeout: 60_000,
+            reporter: {
+                report(progress) {
+                    consoleReporter.report(progress);
+                    if (progress.stage === ProgressReportStage.ResolvedVersion) {
+                        version = progress.version;
+                    }
+                },
+                error: error => consoleReporter.error(error),
+            },
+        });
+        break;
+    } catch (error) {
+        if (attempt === 3) throw error;
+        console.warn(`VS Code download failed (attempt ${attempt}/3); retrying:`, error);
+    }
+}
 
 // Project registration writes workspace settings. Run each mode in its own fixture copy.
 const workspaces = path.resolve('.vscode-test', 'workspaces');
@@ -19,6 +45,7 @@ export default defineConfig([false, true].map(useEnvsExtension => {
     }, null, 2));
     return {
         label,
+        version,
         files: 'out/test/**/*.test.js',
         workspaceFolder,
         installExtensions: ['ms-python.vscode-python-envs', 'ms-python.vscode-pylance'],

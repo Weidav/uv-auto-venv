@@ -73,6 +73,32 @@ suite('uv-auto-venv Extension Test Suite', function () {
 		return api.environments.getActiveEnvironmentPath(vscode.Uri.file(fixturesFolder))?.path ?? '';
 	}
 
+	test('Opening a script before its project preserves the shared workspace interpreter', async function () {
+		if (!envsApi) {
+			this.skip();
+		}
+		const projectPath = path.join(fixturesFolder, 'unopened-project');
+		fs.mkdirSync(path.join(projectPath, 'scripts'), { recursive: true });
+		fs.writeFileSync(path.join(projectPath, 'pyproject.toml'),
+			'[project]\nname = "unopened-project"\nversion = "0.1.0"\n');
+		const script = vscode.Uri.file(path.join(projectPath, 'scripts', 'main.py'));
+		fs.writeFileSync(script.fsPath, '# /// script\n# dependencies = []\n# ///\n');
+		cp.execFileSync('uv', ['sync', '--script', script.fsPath], { cwd: projectPath, stdio: 'pipe' });
+		const python = cp.execFileSync('uv', ['python', 'find'], {
+			cwd: path.join(fixturesFolder, 'example-app'), encoding: 'utf8',
+		}).trim();
+		const previous = await envsApi.resolveEnvironment(vscode.Uri.file(python));
+		assert.ok(previous);
+		const scope = vscode.Uri.file(fixturesFolder);
+		await envsApi.setEnvironment(scope, previous);
+		assert.strictEqual(envsApi.getPythonProject(script)?.uri.toString(), scope.toString());
+
+		await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(script));
+		await vscode.commands.executeCommand('uv-auto-venv.reloadVenv');
+		assert.deepStrictEqual((await envsApi.getEnvironment(scope))?.envId, previous.envId);
+		assert.strictEqual(envsApi.getPythonProject(script)?.uri.toString(), scope.toString());
+	});
+
 	for (const project of projects) {
 		test(`Should activate and switch to project environment for ${project.name}`, async () => {
 			const appFilePath = path.join(fixturesFolder, project.name, project.file);
