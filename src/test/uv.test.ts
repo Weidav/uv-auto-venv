@@ -37,5 +37,17 @@ suite('Real uv environment discovery', function () {
 			assert.ok(selected?.startsWith(path.join(second, '.venv') + path.sep),
 				`Expected the second project's environment, got ${selected}`);
 		});
+
+		test(`Preserves the current selection for an unsynced script (${useEnvsExtension ? 'python-envs' : 'classic'})`, async () => {
+			const project = createProject('project');
+			const script = path.join(root, 'unsynced.py');
+			fs.writeFileSync(script, '# /// script\n# requires-python = ">=3.12"\n# dependencies = ["cowsay>=6.1"]\n# ///\n');
+			const extension = await activateExtension(useEnvsExtension, { realUv: true, workspaceRoot: root });
+			await extension.reload(fileEditor(path.join(project, 'main.py')));
+			const selections = extension.selections.slice();
+			await extension.reload(fileEditor(script));
+			assert.deepStrictEqual(extension.selections, selections);
+			assert.ok(extension.warnings.some(w => w.includes('No cached environment')));
+		});
 	}
 });

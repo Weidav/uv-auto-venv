@@ -11,8 +11,8 @@ const libFile = path.join(lib, 'src', 'lib', '__init__.py');
 const scriptA = path.join(root, 'scripts', 'a.py');
 const scriptB = path.join(root, 'scripts', 'b.py');
 const nestedScript = path.join(app, 'scripts', 'nested.py');
-const scriptAEnv = path.join(root, 'cache', 'a', 'python');
-const scriptBEnv = path.join(root, 'cache', 'b', 'python');
+const scriptAEnv = path.join(root, 'cache', 'a', 'bin', 'python');
+const scriptBEnv = path.join(root, 'cache', 'b', 'bin', 'python');
 const appEnv = path.join(app, '.venv', 'python');
 const libEnv = path.join(lib, '.venv', 'python');
 const metadata = '# /// script\n# dependencies = []\n# ///\n';
@@ -22,6 +22,8 @@ const files = {
 	[appFile]: '', [libFile]: '',
 	[scriptA]: metadata, [scriptB]: metadata, [nestedScript]: metadata,
 	[appEnv]: '', [libEnv]: '', [scriptAEnv]: '', [scriptBEnv]: '',
+	[path.join(root, 'cache', 'a', 'pyvenv.cfg')]: '',
+	[path.join(root, 'cache', 'b', 'pyvenv.cfg')]: '',
 };
 
 async function findPython(args: string[], cwd?: string): Promise<string> {
@@ -102,6 +104,28 @@ suite('Hybrid project and script environments', () => {
 		assert.deepStrictEqual(extension.selections, []);
 		assert.deepStrictEqual(extension.registrations, []);
 	});
+
+	for (const useEnvsExtension of [false, true]) {
+		for (const [name, fallback, virtualEnv] of [
+			['project environment', appEnv, true],
+			['environment beside the cache', path.join(root, 'cache-other', 'bin', 'python'), true],
+			['base Python inside the cache', path.join(root, 'cache', 'base', 'bin', 'python'), false],
+		] as const) {
+			test(`Rejects a script's fallback to ${name} (${useEnvsExtension ? 'python-envs' : 'classic'})`, async () => {
+				const extension = await activateExtension(useEnvsExtension, {
+					workspaceRoot: root,
+					files: { ...files, [fallback]: '', ...(virtualEnv ? {
+						[path.join(path.dirname(path.dirname(fallback)), 'pyvenv.cfg')]: '',
+					} : {}) },
+					findPython: async () => fallback,
+				});
+				await extension.reload(fileEditor(scriptA));
+				assert.deepStrictEqual(extension.selections, []);
+				assert.deepStrictEqual(extension.registrations, []);
+				assert.ok(extension.warnings.some(w => w.includes('No cached environment')));
+			});
+		}
+	}
 
 	test('Keeps the shared selection intact when python-envs cannot resolve an environment', async () => {
 		const extension = await activate({ resolve: false });

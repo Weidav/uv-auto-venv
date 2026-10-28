@@ -77,13 +77,21 @@ function hasPep723Metadata(filePath: string): boolean {
  */
 async function uvPythonFindScript(filePath: string): Promise<string | null> {
 	try {
-		const { stdout } = await execFileAsync("uv", [
-			"python",
-			"find",
-			"--script",
-			filePath,
+		const [{ stdout }, { stdout: cacheDir }] = await Promise.all([
+			execFileAsync("uv", ["python", "find", "--script", filePath]),
+			execFileAsync("uv", ["cache", "dir"]),
 		]);
-		return stdout.trim() || null;
+		const pythonPath = stdout.trim();
+		const cachePath = cacheDir.trim();
+		const relativePath = path.relative(cachePath, pythonPath);
+		// Without a cached script environment, uv can return base Python or a project's .venv.
+		if (!pythonPath || !cachePath || path.isAbsolute(relativePath)
+			|| relativePath === ".." || relativePath.startsWith(".." + path.sep)
+			|| !fs.existsSync(path.join(path.dirname(path.dirname(pythonPath)), "pyvenv.cfg"))) {
+			log.warn(`No cached environment found for script ${filePath}; keeping the current environment`);
+			return null;
+		}
+		return pythonPath;
 	} catch (err: unknown) {
 		const message = err instanceof Error ? err.message : String(err);
 		log.warn(`uv python find --script failed for ${filePath}: ${message}`);

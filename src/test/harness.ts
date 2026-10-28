@@ -23,6 +23,7 @@ export function fileEditor(file: string, languageId = 'python'): vscode.TextEdit
 interface HarnessOptions {
 	realUv?: boolean;
 	env?: NodeJS.ProcessEnv;
+	cacheDir?: string;
 	workspaceRoot?: string;
 	files?: Record<string, string>;
 	projects?: string[];
@@ -134,6 +135,10 @@ export async function activateExtension(useEnvsExtension: boolean, options: Harn
 	const execFile = Object.assign(() => assert.fail('Expected promisified execFile'), {
 		[promisify.custom]: async (command: string, args: string[], execOptions?: { cwd: string }) => {
 			assert.strictEqual(command, 'uv');
+			if (args[0] === 'cache') {
+				assert.deepStrictEqual(Array.from(args), ['cache', 'dir']);
+				return { stdout: options.cacheDir ?? path.join(options.workspaceRoot ?? 'workspace', 'cache') };
+			}
 			lookups.push(execOptions?.cwd ?? args[3]);
 			if (options.findPython) {
 				return { stdout: await options.findPython(Array.from(args), execOptions?.cwd) };
