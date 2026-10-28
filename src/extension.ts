@@ -77,9 +77,10 @@ function hasPep723Metadata(filePath: string): boolean {
  */
 async function uvPythonFindScript(filePath: string): Promise<string | null> {
 	try {
+		const options = { cwd: path.dirname(filePath) };
 		const [{ stdout }, { stdout: cacheDir }] = await Promise.all([
-			execFileAsync("uv", ["python", "find", "--script", filePath]),
-			execFileAsync("uv", ["cache", "dir"]),
+			execFileAsync("uv", ["python", "find", "--script", filePath], options),
+			execFileAsync("uv", ["cache", "dir"], options),
 		]);
 		const pythonPath = stdout.trim();
 		const cachePath = cacheDir.trim();

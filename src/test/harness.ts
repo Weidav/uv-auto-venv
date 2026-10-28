@@ -139,7 +139,7 @@ export async function activateExtension(useEnvsExtension: boolean, options: Harn
 				assert.deepStrictEqual(Array.from(args), ['cache', 'dir']);
 				return { stdout: options.cacheDir ?? path.join(options.workspaceRoot ?? 'workspace', 'cache') };
 			}
-			lookups.push(execOptions?.cwd ?? args[3]);
+			lookups.push(args[2] === '--script' ? args[3] : execOptions!.cwd);
 			if (options.findPython) {
 				return { stdout: await options.findPython(Array.from(args), execOptions?.cwd) };
 			}

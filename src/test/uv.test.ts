@@ -49,5 +49,24 @@ suite('Real uv environment discovery', function () {
 			assert.deepStrictEqual(extension.selections, selections);
 			assert.ok(extension.warnings.some(w => w.includes('No cached environment')));
 		});
+
+		test(`Uses a script's local uv cache configuration (${useEnvsExtension ? 'python-envs' : 'classic'})`, async () => {
+			const directory = path.join(root, 'scripts');
+			const cache = path.join(root, 'custom-cache');
+			fs.mkdirSync(directory);
+			fs.writeFileSync(path.join(directory, 'uv.toml'), `cache-dir = ${JSON.stringify(cache)}\n`);
+			const script = path.join(directory, 'main.py');
+			fs.writeFileSync(script, '# /// script\n# requires-python = ">=3.12"\n# dependencies = []\n# ///\n');
+			cp.execFileSync('uv', ['sync', '--script', script], { cwd: directory, stdio: 'pipe' });
+			const expected = cp.execFileSync('uv', ['python', 'find', '--script', script], {
+				cwd: directory, encoding: 'utf8',
+			}).trim();
+			assert.ok(expected.startsWith(cache + path.sep), 'The fixture must use the custom cache');
+			const extension = await activateExtension(useEnvsExtension, { realUv: true, workspaceRoot: root });
+			await extension.reload(fileEditor(script));
+			const selected = extension.selections.at(-1)?.interpreter;
+			assert.ok(selected, `Expected the script environment, got warnings: ${extension.warnings}`);
+			assert.strictEqual(path.relative(expected, selected), '');
+		});
 	}
 });
