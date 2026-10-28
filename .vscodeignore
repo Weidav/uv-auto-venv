@@ -2,6 +2,7 @@
 .vscode-test/**
 .devcontainer/**
 .github/**
+.ona/**
 out/**
 node_modules/**
 src/**

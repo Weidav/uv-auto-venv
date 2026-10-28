@@ -6,6 +6,8 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-28
+
 ### Changed
 
 - With Python Environments enabled, regular uv projects are registered at their `pyproject.toml` folders and keep independent environment assignments. Project folders are saved in workspace settings when first opened.
