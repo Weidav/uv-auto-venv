@@ -153,8 +153,24 @@ function findProjectRoot(fileDir: string, scope: vscode.Uri): vscode.Uri | undef
 	}
 	let directory = fileDir;
 	while (true) {
-		if (fs.existsSync(path.join(directory, "pyproject.toml"))) {
-			return vscode.Uri.file(directory);
+		const pyprojectPath = path.join(directory, "pyproject.toml");
+		if (fs.existsSync(pyprojectPath)) {
+			try {
+				const metadata = parseToml(fs.readFileSync(pyprojectPath, "utf8")) as {
+					project?: unknown;
+					"build-system"?: unknown;
+					tool?: { uv?: { workspace?: unknown }; poetry?: unknown };
+				};
+				// Tool settings alone do not give a folder its own Python environment.
+				if (metadata.project !== undefined || metadata["build-system"] !== undefined
+					|| metadata.tool?.uv?.workspace !== undefined || metadata.tool?.poetry !== undefined) {
+					return vscode.Uri.file(directory);
+				}
+			} catch (error) {
+				// Preserve isolation when project metadata is temporarily invalid or unreadable.
+				log.warn(`Could not read project metadata at ${pyprojectPath}: ${error}`);
+				return vscode.Uri.file(directory);
+			}
 		}
 		if (path.relative(scope.fsPath, directory) === "" || path.dirname(directory) === directory) {
 			return undefined;

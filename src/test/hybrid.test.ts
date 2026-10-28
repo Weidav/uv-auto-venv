@@ -132,6 +132,51 @@ suite('Hybrid project and script environments', () => {
 		assert.ok(extension.warnings.some(w => w.includes('separate scope')));
 	});
 
+	for (const directory of [root, path.dirname(scriptA)]) {
+		test(`Switches scripts beneath tooling-only configuration at ${path.relative(root, directory) || 'the workspace root'}`, async () => {
+			const extension = await activate({ files: {
+				...files, [path.join(directory, 'pyproject.toml')]: '[tool.ruff]\nline-length = 100\n',
+			} });
+			await extension.reload(fileEditor(appFile));
+			await extension.reload(fileEditor(scriptA));
+			await extension.reload(fileEditor(scriptB));
+			assert.deepStrictEqual(extension.registrations, [app]);
+			assert.deepStrictEqual(extension.selections.slice(-2), [
+				{ scope: root, interpreter: scriptAEnv }, { scope: root, interpreter: scriptBEnv },
+			]);
+			assert.strictEqual((await extension.envsApi.getEnvironment(uri(appFile)))?.environmentPath.fsPath, appEnv);
+			assert.deepStrictEqual(extension.warnings, []);
+		});
+	}
+
+	test('Does not register a tooling-only folder as a regular project', async () => {
+		const looseFile = path.join(root, 'tools', 'helper.py');
+		const extension = await activate({ files: {
+			...files, [looseFile]: '', [path.join(path.dirname(looseFile), 'pyproject.toml')]: '[tool.pytest.ini_options]\n',
+		} });
+		await extension.reload(fileEditor(looseFile));
+		assert.deepStrictEqual(extension.registrations, []);
+		assert.deepStrictEqual(extension.selections, [{ scope: root, interpreter: appEnv }]);
+	});
+
+	test('Looks past tooling-only configuration to protect a containing project', async () => {
+		const extension = await activate({ files: {
+			...files, [path.join(path.dirname(nestedScript), 'pyproject.toml')]: '[tool.ruff]\n',
+		} });
+		await extension.reload(fileEditor(nestedScript));
+		assert.deepStrictEqual(extension.selections, []);
+		assert.ok(extension.warnings.some(w => w.includes(`regular project ${app};`) && w.includes('separate scope')));
+	});
+
+	for (const metadata of ['[build-system]\nrequires = []\n', '[tool.uv.workspace]\nmembers = ["apps/*"]\n', '[tool.poetry]\nname = "legacy"\n', '[project\n']) {
+		test(`Preserves project isolation for ${metadata.trim().split('\n')[0]}`, async () => {
+			const extension = await activate({ files: { ...files, [path.join(root, 'pyproject.toml')]: metadata } });
+			await extension.reload(fileEditor(scriptA));
+			assert.deepStrictEqual(extension.selections, []);
+			assert.ok(extension.warnings.some(w => w.includes('separate scope')));
+		});
+	}
+
 	test('Does not re-register projects restored from settings', async () => {
 		const extension = await activate({ projects: [app] });
 		await extension.reload(fileEditor(appFile));
