@@ -158,8 +158,10 @@ export async function activateExtension(useEnvsExtension: boolean, options: Harn
 	const dependencies: Record<string, unknown> = {
 		vscode: vscodeApi,
 		'@vscode/python-extension': { PythonExtension: { api: async () => pythonApi } },
+		'smol-toml': require('smol-toml'),
 		child_process: options.realUv ? cp : { execFile },
 		fs: options.realUv ? fs : {
+			readFileSync: (file: string) => options.files?.[file] ?? '',
 			openSync: (file: string) => { openFile = file; return 0; },
 			readSync: (_fd: number, buffer: Buffer) => buffer.write(options.files?.[openFile] ?? ''),
 			closeSync() {},

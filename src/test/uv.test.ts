@@ -73,5 +73,40 @@ suite('Real uv environment discovery', function () {
 			assert.ok(selected, `Expected the script environment, got warnings: ${extension.warnings}`);
 			assert.strictEqual(path.relative(expected, selected), '');
 		});
+
+		for (const inlineCache of [JSON.stringify('custom cache'), "'''custom cache'''", '"""custom cache"""']) {
+			test(`Uses inline cache-dir = ${inlineCache} (${useEnvsExtension ? 'python-envs' : 'classic'})`, async () => {
+				const directory = path.join(root, 'scripts');
+				fs.mkdirSync(directory);
+				const script = path.join(directory, 'main.py');
+				fs.writeFileSync(script, '# /// script\n# requires-python = ">=3.12"\n# dependencies = []\n'
+					+ `# [tool.uv]\n# cache-dir = ${inlineCache}\n# ///\n`);
+				cp.execFileSync('uv', ['sync', '--script', script], { cwd: directory, stdio: 'pipe' });
+				const expected = cp.execFileSync('uv', ['python', 'find', '--script', script], {
+					cwd: directory, encoding: 'utf8',
+				}).trim();
+				assert.ok(expected.startsWith(path.join(directory, 'custom cache') + path.sep));
+				const extension = await activateExtension(useEnvsExtension, { realUv: true, workspaceRoot: root });
+				await extension.reload(fileEditor(script));
+				assert.strictEqual(extension.selections.at(-1)?.interpreter, expected,
+					`Expected the inline cache environment, got warnings: ${extension.warnings}`);
+			});
+		}
+
+		test(`Honors UV_CACHE_DIR over inline cache settings (${useEnvsExtension ? 'python-envs' : 'classic'})`, async () => {
+			const script = path.join(root, 'main.py');
+			const cache = path.join(root, 'environment-cache');
+			const env = { ...process.env, UV_CACHE_DIR: 'environment-cache' };
+			fs.writeFileSync(script, '# /// script\n# dependencies = []\n'
+				+ '# [tool.uv]\n# cache-dir = "inline-cache"\n# ///\n');
+			cp.execFileSync('uv', ['sync', '--script', script], { cwd: root, env, stdio: 'pipe' });
+			const expected = cp.execFileSync('uv', ['python', 'find', '--script', script], {
+				cwd: root, env, encoding: 'utf8',
+			}).trim();
+			assert.ok(expected.startsWith(cache + path.sep));
+			const extension = await activateExtension(useEnvsExtension, { realUv: true, workspaceRoot: root, env });
+			await extension.reload(fileEditor(script));
+			assert.strictEqual(extension.selections.at(-1)?.interpreter, expected);
+		});
 	}
 });

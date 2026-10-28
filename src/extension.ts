@@ -5,7 +5,10 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { PythonExtension } from "@vscode/python-extension";
 import type { PythonEnvironmentApi } from "@vscode/python-environments";
+import type * as Toml from "smol-toml" with { "resolution-mode": "import" };
 
+// smol-toml shares ESM declarations with its CommonJS entry point.
+const { parse: parseToml }: typeof Toml = require("smol-toml");
 const execFileAsync = promisify(execFile);
 
 const log = vscode.window.createOutputChannel("uv Auto venv", { log: true });
@@ -77,13 +80,29 @@ function hasPep723Metadata(filePath: string): boolean {
  */
 async function uvPythonFindScript(filePath: string): Promise<string | null> {
 	try {
-		const options = { cwd: path.dirname(filePath) };
+		const options = { cwd: path.dirname(filePath), env: process.env };
+		const cacheArgs = ["cache", "dir"];
+		// `uv cache dir` cannot read inline settings; supply the script's cache override.
+		// Environment variables take precedence over inline configuration in uv.
+		if (!process.env.UV_CACHE_DIR) {
+			const block = fs.readFileSync(filePath, "utf8")
+				.match(/^# \/\/\/ script[ \t]*\r?\n((?:#(?: .*)?\r?\n)*?)# \/\/\/[ \t]*\r?$/m);
+			if (block) {
+				const metadata = parseToml(block[1].split(/\r?\n/).map(line => line.slice(2)).join("\n")) as {
+					tool?: { uv?: { "cache-dir"?: string } };
+				};
+				const cacheDir = metadata.tool?.uv?.["cache-dir"];
+				if (typeof cacheDir === "string") {
+					cacheArgs.push("--cache-dir", cacheDir);
+				}
+			}
+		}
 		const [{ stdout }, { stdout: cacheDir }] = await Promise.all([
 			execFileAsync("uv", ["python", "find", "--script", filePath], options),
-			execFileAsync("uv", ["cache", "dir"], options),
+			execFileAsync("uv", cacheArgs, options),
 		]);
 		const pythonPath = stdout.trim();
-		const cachePath = cacheDir.trim();
+		const cachePath = cacheDir.trim() ? path.resolve(options.cwd, cacheDir.trim()) : "";
 		const relativePath = path.relative(cachePath, pythonPath);
 		// Without a cached script environment, uv can return base Python or a project's .venv.
 		if (!pythonPath || !cachePath || path.isAbsolute(relativePath)
