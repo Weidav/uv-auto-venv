@@ -97,8 +97,16 @@ async function uvPythonFindScript(filePath: string): Promise<string | null> {
  */
 async function uvPythonFind(cwd: string): Promise<string | null> {
 	try {
+		// An environment inherited from the shell must not override this project's .venv.
+		const env = { ...process.env };
+		for (const key of Object.keys(env)) {
+			if (key.toUpperCase() === "VIRTUAL_ENV") {
+				delete env[key];
+			}
+		}
 		const { stdout } = await execFileAsync("uv", ["python", "find"], {
 			cwd,
+			env,
 		});
 		return stdout.trim() || null;
 	} catch (err: unknown) {

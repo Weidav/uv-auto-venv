@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
 import { runInNewContext } from 'vm';
+import * as cp from 'child_process';
 import type * as vscode from 'vscode';
 
 type Editor = vscode.TextEditor | undefined;
@@ -20,6 +21,8 @@ export function fileEditor(file: string, languageId = 'python'): vscode.TextEdit
 }
 
 interface HarnessOptions {
+	realUv?: boolean;
+	env?: NodeJS.ProcessEnv;
 	workspaceRoot?: string;
 	files?: Record<string, string>;
 	projects?: string[];
@@ -142,8 +145,8 @@ export async function activateExtension(useEnvsExtension: boolean, options: Harn
 	const dependencies: Record<string, unknown> = {
 		vscode: vscodeApi,
 		'@vscode/python-extension': { PythonExtension: { api: async () => pythonApi } },
-		child_process: { execFile },
-		fs: {
+		child_process: options.realUv ? cp : { execFile },
+		fs: options.realUv ? fs : {
 			openSync: (file: string) => { openFile = file; return 0; },
 			readSync: (_fd: number, buffer: Buffer) => buffer.write(options.files?.[openFile] ?? ''),
 			closeSync() {},
@@ -158,7 +161,7 @@ export async function activateExtension(useEnvsExtension: boolean, options: Harn
 			assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
 			return dependencies[name];
 		},
-		Buffer, console,
+		Buffer, console, process: { env: options.env ?? process.env },
 		setTimeout: (callback: () => void, delay: number) => setTimeout(callback, delay),
 		clearTimeout: (timer: ReturnType<typeof setTimeout>) => clearTimeout(timer),
 	});
