@@ -31,6 +31,8 @@ interface HarnessOptions {
 	resolve?: boolean;
 	envsInstalled?: boolean;
 	persistProject?: (save: () => void) => void;
+	refreshEnvironments?: () => Promise<void>;
+	selectClassic?: (interpreter: string) => Promise<void>;
 }
 
 interface Environment {
@@ -62,11 +64,12 @@ export async function activateExtension(useEnvsExtension: boolean, options: Harn
 	const pythonApi = {
 		environments: {
 			getActiveEnvironmentPath: () => ({ path: '' }),
-			refreshEnvironments: async () => {},
+			refreshEnvironments: async () => { await options.refreshEnvironments?.(); },
 			updateActiveEnvironmentPath: async (interpreter: string, scope?: vscode.Uri) => {
 				const selection = { interpreter, scope: scope?.fsPath ?? 'global' };
 				classicSelections.push(selection);
 				selections.push(selection);
+				await options.selectClassic?.(interpreter);
 			},
 		},
 	};

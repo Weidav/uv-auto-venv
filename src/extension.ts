@@ -276,6 +276,9 @@ async function applyInterpreter(
 	);
 	if (refreshEnvironment) {
 		await pythonApi.environments.refreshEnvironments();
+		if (!isCurrent()) {
+			return;
+		}
 		// Clear cached path first so the update is not treated as a no-op
 		await pythonApi.environments.updateActiveEnvironmentPath(
 			"",
@@ -285,7 +288,8 @@ async function applyInterpreter(
 		return; // already set
 	}
 
-	if (!isCurrent()) {
+	// Once clearing starts, finish reapplying. Newer selections wait in the mutation queue.
+	if (!refreshEnvironment && !isCurrent()) {
 		return;
 	}
 
