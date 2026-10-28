@@ -118,7 +118,9 @@ suite('uv-auto-venv Extension Test Suite', function () {
 			await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(script)));
 			await vscode.commands.executeCommand('uv-auto-venv.reloadVenv');
 			const expected = cp.execFileSync('uv', ['python', 'find', '--script', script], { encoding: 'utf8' }).trim();
-			assert.strictEqual(await environmentPath(vscode.Uri.file(fixturesFolder)), expected);
+			const actual = await environmentPath(vscode.Uri.file(fixturesFolder));
+			// VS Code normalizes Windows drive letters; uv may return uppercase.
+			assert.strictEqual(vscode.Uri.file(actual).fsPath, vscode.Uri.file(expected).fsPath);
 			for (const project of regularProjects) {
 				const file = vscode.Uri.file(path.join(fixturesFolder, project.name, project.file));
 				assert.ok((await environmentPath(file)).includes(project.expectedPath), `${project.name} lost its fixed assignment`);
