@@ -16,6 +16,9 @@ All notable changes to the **uv-auto-venv** extension will be documented in this
 
 - Failed script lookups no longer fall through to regular-project interpreter selection. Python Environments resolution failures retain the current selection instead of falling back to workspace-wide switching.
 - Discarded stale tab-selection results and serialized interpreter updates to prevent slow lookups from overwriting newer selections.
+- Project discovery ignores an activated virtual environment inherited by VS Code, so each project can select its own `.venv`.
+- PEP 723 script lookups retain the current interpreter when no cached script environment exists, instead of selecting base Python or a project's environment.
+- Script lookups run from the script's directory so local uv configuration, including custom cache directories, is respected.
 
 ## [1.5.2] - 2026-07-26
 
