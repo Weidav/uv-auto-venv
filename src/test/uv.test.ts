@@ -23,20 +23,25 @@ suite('Real uv environment discovery', function () {
 	}
 
 	for (const useEnvsExtension of [false, true]) {
-		test(`Ignores an inherited active environment (${useEnvsExtension ? 'python-envs' : 'classic'})`, async () => {
-			const first = createProject('first');
-			const second = createProject('second');
-			const inherited = path.join(first, '.venv');
-			const extension = await activateExtension(useEnvsExtension, {
-				realUv: true,
-				workspaceRoot: root,
-				env: { ...process.env, VIRTUAL_ENV: inherited },
+		for (const variable of ['VIRTUAL_ENV', 'CONDA_PREFIX']) {
+			test(`Ignores an inherited ${variable} environment (${useEnvsExtension ? 'python-envs' : 'classic'})`, async () => {
+				const first = createProject('first');
+				const second = createProject('second');
+				const inherited = path.join(first, '.venv');
+				if (variable === 'CONDA_PREFIX') {
+					fs.mkdirSync(path.join(inherited, 'conda-meta'));
+				}
+				const extension = await activateExtension(useEnvsExtension, {
+					realUv: true,
+					workspaceRoot: root,
+					env: { ...process.env, [variable]: inherited },
+				});
+				await extension.reload(fileEditor(path.join(second, 'main.py')));
+				const selected = extension.selections.at(-1)?.interpreter;
+				assert.ok(selected?.startsWith(path.join(second, '.venv') + path.sep),
+					`Expected the second project's environment, got ${selected}`);
 			});
-			await extension.reload(fileEditor(path.join(second, 'main.py')));
-			const selected = extension.selections.at(-1)?.interpreter;
-			assert.ok(selected?.startsWith(path.join(second, '.venv') + path.sep),
-				`Expected the second project's environment, got ${selected}`);
-		});
+		}
 
 		test(`Preserves the current selection for an unsynced script (${useEnvsExtension ? 'python-envs' : 'classic'})`, async () => {
 			const project = createProject('project');

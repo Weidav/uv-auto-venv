@@ -109,7 +109,7 @@ async function uvPythonFind(cwd: string): Promise<string | null> {
 		// An environment inherited from the shell must not override this project's .venv.
 		const env = { ...process.env };
 		for (const key of Object.keys(env)) {
-			if (key.toUpperCase() === "VIRTUAL_ENV") {
+			if (["VIRTUAL_ENV", "CONDA_PREFIX"].includes(key.toUpperCase())) {
 				delete env[key];
 			}
 		}
