@@ -210,6 +210,15 @@ async function applyInterpreter(
 	// ── python-envs path (preferred when available) ─────────────────────
 	if (envsApi) {
 		try {
+			if (!isCurrent()) {
+				return;
+			}
+			if (refreshEnvironment) {
+				await envsApi.refreshEnvironments(scope);
+				if (!isCurrent()) {
+					return;
+				}
+			}
 			const env = await envsApi.resolveEnvironment(
 				vscode.Uri.file(pythonPath)
 			);

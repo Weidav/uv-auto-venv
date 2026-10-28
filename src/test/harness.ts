@@ -32,12 +32,15 @@ interface HarnessOptions {
 	envsInstalled?: boolean;
 	persistProject?: (save: () => void) => void;
 	refreshEnvironments?: () => Promise<void>;
+	refreshEnvsEnvironments?: (scope: vscode.Uri | undefined) => Promise<void>;
+	resolveEnvironment?: (environmentPath: vscode.Uri) => Promise<Environment | undefined>;
 	selectClassic?: (interpreter: string) => Promise<void>;
 }
 
 interface Environment {
 	envId: { id: string; managerId: string };
 	environmentPath: vscode.Uri;
+	version?: string;
 }
 
 /** Load the real extension in isolation, replacing only external APIs and uv. */
@@ -74,7 +77,9 @@ export async function activateExtension(useEnvsExtension: boolean, options: Harn
 		},
 	};
 	const envsApi = {
-		resolveEnvironment: async (environmentPath: vscode.Uri) => options.resolve === false ? undefined : ({
+		refreshEnvironments: async (scope?: vscode.Uri) => { await options.refreshEnvsEnvironments?.(scope); },
+		resolveEnvironment: async (environmentPath: vscode.Uri) => options.resolveEnvironment
+			? options.resolveEnvironment(environmentPath) : options.resolve === false ? undefined : ({
 			envId: { id: environmentPath.fsPath, managerId: 'venv' }, environmentPath,
 		}),
 		getPythonProjects: () => [...projects.values()],

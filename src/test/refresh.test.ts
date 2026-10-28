@@ -1,7 +1,72 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import { mock } from 'node:test';
-import { activateExtension, editor } from './harness';
+import { activateExtension, editor, uri } from './harness';
+
+suite('Python Environments manual refresh', () => {
+	test('Refreshes cached interpreter details only on manual reload', async () => {
+		let actualVersion = '3.12';
+		let cachedVersion = actualVersion;
+		const refreshScopes: (string | undefined)[] = [];
+		const extension = await activateExtension(true, {
+			refreshEnvsEnvironments: async scope => {
+				refreshScopes.push(scope?.fsPath);
+				cachedVersion = actualVersion;
+			},
+			resolveEnvironment: async environmentPath => ({
+				envId: { id: environmentPath.fsPath, managerId: 'venv' },
+				environmentPath, version: cachedVersion,
+			}),
+		});
+		mock.timers.enable({ apis: ['setTimeout'] });
+		try {
+			extension.onChange(editor('app'));
+			mock.timers.tick(300);
+		} finally {
+			mock.timers.reset();
+		}
+		await new Promise<void>(resolve => setImmediate(resolve));
+		const scope = uri(path.join('workspace', 'app'));
+		assert.strictEqual((await extension.envsApi.getEnvironment(scope))?.version, '3.12');
+		assert.deepStrictEqual(refreshScopes, []);
+
+		actualVersion = '3.13'; // The environment was recreated at the same path.
+		await extension.reload(editor('app'));
+		assert.strictEqual((await extension.envsApi.getEnvironment(scope))?.version, '3.13');
+		assert.deepStrictEqual(refreshScopes, [scope.fsPath]);
+	});
+
+	test('Discards a reload when the editor changes during discovery', async () => {
+		let finishRefresh!: () => void;
+		let resolutions = 0;
+		const extension = await activateExtension(true, {
+			refreshEnvsEnvironments: () => new Promise<void>(resolve => { finishRefresh = resolve; }),
+			resolveEnvironment: async () => { resolutions++; return undefined; },
+		});
+		const refresh = extension.reload(editor('app'));
+		await new Promise<void>(resolve => setImmediate(resolve));
+		assert.strictEqual(typeof finishRefresh, 'function');
+		extension.onChange(undefined);
+		finishRefresh();
+		await refresh;
+		assert.strictEqual(resolutions, 0);
+		assert.deepStrictEqual(extension.selections, []);
+	});
+
+	test('Preserves the current selection when discovery fails', async () => {
+		const extension = await activateExtension(true, {
+			workspaceRoot: path.join('workspace', 'app'),
+			refreshEnvsEnvironments: async () => { throw new Error('Discovery failed'); },
+		});
+		const scope = uri(path.join('workspace', 'app'));
+		const previous = await extension.envsApi.resolveEnvironment(uri('previous-python'));
+		assert.ok(previous);
+		await extension.envsApi.setEnvironment(scope, previous);
+		await extension.reload(editor('app'));
+		assert.strictEqual(await extension.envsApi.getEnvironment(scope), previous);
+		assert.ok(extension.warnings.some(w => w.includes('Discovery failed')));
+	});
+});
 
 suite('Classic manual refresh cancellation', () => {
 	for (const [name, nextEditor] of [
